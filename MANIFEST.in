@@ -1,0 +1,6 @@
+include CITATION.cff
+recursive-include chime_perf/data *.csv *.yml *.txt
+recursive-include docs *.pdf
+recursive-include example *.ipynb
+recursive-include tests *.py
+global-exclude *.pyc *.pyo

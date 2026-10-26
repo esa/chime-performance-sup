@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "Please cite this paper."
+title: >-
+  CHIME System Performance at Critical Design Review:
+  A parametric model for end-to-end simulation analysis
+authors:
+  - family-names: "Fernandez Nunez"
+    given-names: "Ignacio"
+  - family-names: "Riedel"
+    given-names: "Mirko"
+  - family-names: "Mariani"
+    given-names: "Flavio"
+  - family-names: "Weber"
+    given-names: "Heidrun"
+  - family-names: "Strese"
+    given-names: "Helene"
+  - family-names: "Shickling"
+    given-names: "Anke"
+  - family-names: "Garcia"
+    given-names: "Adrian"
+  - family-names: "Celesti"
+    given-names: "Marco"
+  - family-names: "Gabriele"
+    given-names: "Antonio"
+  - family-names: "Despoisse"
+    given-names: "Laurent"
+  - family-names: "Nieke"
+    given-names: "Jens"
+url: "https://spie.org/spie-sensors-imaging/presentation/CHIME-system-performance-at-critical-design-review--a-parametric/14279-7"
