@@ -22,11 +22,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pipeline = [
+    "eopl>=0.2.1",
+    "numba>=0.61",
+    "Py6S>=1.9.2",
+]
 dev = [
     "pytest>=7.4",
     "ruff>=0.5",
     "mypy>=1.8",
 ]
+
+[project.scripts]
+chime-sup = "chime_perf.run:main"
 
 [project.urls]
 Repository = "https://github.com/esa/chime-performance-sup"
@@ -34,7 +42,7 @@ Issues = "https://github.com/esa/chime-performance-sup/issues"
 Paper = "https://spie.org/spie-sensors-imaging/presentation/CHIME-system-performance-at-critical-design-review--a-parametric/14279-7"
 
 [tool.setuptools]
-packages = ["chime_perf"]
+packages = ["chime_perf", "chime_perf.algorithms"]
 include-package-data = false
 
 [tool.setuptools.package-data]

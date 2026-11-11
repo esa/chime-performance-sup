@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from chime_perf.spatial import psf_kernel, psf_sigma_px
+from chime_perf.algorithms.instrument_algorithms import psf_kernel, psf_sigma_px
 
 
 def test_psf_sigma_scales_with_oversampling():

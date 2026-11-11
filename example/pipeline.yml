@@ -1,0 +1,29 @@
+# Synthetic scene settings; replace the atmosphere with the acquisition conditions.
+run_options:
+  precision: float64
+
+breakpoints: false
+
+# Show the input and final output; other report sections stay disabled.
+report:
+  report_format: ipynb       # Use py for a runnable Python report.
+  generate_input: true
+  plot_2d_indexes: [:,:,0]
+
+scene:
+  spatial_interpolation: true
+  detector_spacing_m: 30.0
+  spatial_oversampling: 5   # 30 m / 5 = 6 m; use auto for the nearest integer factor
+  spectral_step_nm: 1.68   # 8.4 nm / 5; omit to keep existing wavelengths
+
+atmosphere:
+  profile: USStandard1962
+  aerosol: Continental
+  aot550: 0.1
+  solar_zenith_deg: 30.0
+  solar_azimuth_deg: 0.0
+  view_zenith_deg: 0.0
+  view_azimuth_deg: 0.0
+  target_altitude_km: 0.0
+  month: 6
+  day: 21

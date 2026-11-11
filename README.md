@@ -20,10 +20,9 @@ and not an orbit or direct-location framework.
 
 ## Status
 
-Currently under development. The first release, v0.1.0, contains the radiometric,
-spectral and spatial performance functions, CDR-2025 parameters and an example notebook.
-
-Still to come: A full mini E2E reference implementation including scene generation, atmospheric propagation and correction
+The package provides the radiometric, spectral and spatial performance functions,
+CDR-2025 parameters, scene generation and atmospheric propagation.
+Instrument acquisition and atmospheric correction remain to be implemented.
 
 Roadmap:
 - Oct/Nov 2026 First release
@@ -62,10 +61,116 @@ tagged `v0.1.0` attaches the files once those checks pass. No registry publishin
 
 ## Use
 The parameter files are included in `chime_perf/data/` and loaded with `ChimeParams.load()`.
+`chime_excluded_regions.csv` supplies wavelength intervals for compliance-plot
+annotations only. Its boundaries are estimates derived from low reference radiance,
+not exact mission exclusion limits. The processing equations still evaluate those channels.
 Use `ChimeParams.load(data_dir="path/to/parameters")` to supply a different parameter set.
 
 Run `example/example.ipynb` for further details. A Jupyter environment is needed to
 open the notebook interactively.
+
+## Processing modules
+
+Install the pipeline dependencies with `python -m pip install -e ".[pipeline]"`.
+Global and local YAML configuration is loaded by EOPL (version 0.2.1 or later).
+
+`chime_perf/run.py` parses arguments and selects modules. Each callable module
+owns its EOPL Pipeline and schedules the individual mathematical operations:
+
+- `chime_perf/ssgm.py`: spatial interpolation; spectral interpolation, or NNLS
+  fitting followed by spectral reconstruction. Algorithms are in
+  `chime_perf/algorithms/ssgm_algorithms.py`.
+- `chime_perf/athmo.py`: transmission, solar radiance scaling and atmospheric
+  propagation. Algorithms and the 6S adapter are in
+  `chime_perf/algorithms/athmo_algorithms.py`.
+
+Shared grid and image helpers are in `chime_perf/algorithms/algorithms.py`.
+The radiometric, spectral and spatial performance equations are grouped in
+`chime_perf/algorithms/instrument_algorithms.py`.
+
+```bash
+python example/setup_scene.py
+chime-sup --ssgm --input demo-input/reflectance.nc --output outputs/scene --config example/pipeline.yml
+chime-sup --athmo --input outputs/scene/scene.nc --output outputs/atmosphere --sixs-path /path/to/sixs
+```
+
+Select `--all` to compose the modules in processing order. Images are passed
+in memory, with only the final module saving its products:
+
+```bash
+chime-sup --all --input demo-input/reflectance.nc --output outputs/chain --config example/pipeline.yml --sixs-path /path/to/sixs
+```
+
+Add `--save-intermediates` to save each module's product and have the next module
+load it. Outputs then include `ssgm/scene.nc` as well as `athmo/toa.nc`.
+Standalone modules save directly in `--output`. Each saved module has its own
+EOPL manifest. `--athm` is an alias for `--athmo`.
+
+The module functions can also be called directly:
+
+```python
+from chime_perf.ssgm import ssgm
+from chime_perf.athmo import athmo
+
+scene = ssgm(input_path="reflectance.nc", config_path="pipeline.yml", save=False)
+radiance = athmo(data=scene, config_path="pipeline.yml", output_root="outputs/athmo")
+```
+
+The input is a NetCDF BOA reflectance cube named `reflectance`. Dimensions are
+`ACT`, `ALT`, `SPE`, with spatial coordinates in `m`, spectral coordinates in `nm`,
+and reflectance units `1`. The image's `geometry` attribute records whether its
+spatial grid is map or sensor geometry; axis names alone do not perform a rotation.
+Missing samples remain NaN. Spatial interpolation is explicitly controlled by YAML:
+
+```yaml
+scene:
+  spatial_interpolation: true
+  detector_spacing_m: 30.0
+  spatial_oversampling: auto  # Or a positive integer such as 5 for a 6 m grid.
+```
+
+`auto` chooses the nearest integer to detector spacing divided by input spacing,
+separately for ACT and ALT (using the median input spacing). Ties select the larger
+factor. For a 30 m detector, 5 m input keeps factor 6; 5.5 m input uses factor 5
+and is linearly resampled to 6 m. Nearest-factor rounding can slightly coarsen data.
+An explicit integer factor fixes the requested grid instead of inferring it.
+
+The first input centre anchors the grid, with samples only inside the input extent.
+Nominal centres at `origin + i * detector_spacing_m` therefore coincide with every
+integer-factor oversampled sample. When resampling is enabled, the factor and origin are recorded in the image metadata.
+Sensor-grid rotation remains an instrument operation; it must preserve this spacing
+and centre convention before final detector sampling.
+
+With `spatial_interpolation: false` (the default), the spatial operation is skipped.
+Existing coordinates must already be regular with integer oversampling; other grids
+raise an error asking to enable interpolation. This keeps fractional oversampling
+out of the instrument interface. The example YAML explicitly selects factor 5 for
+its synthetic scene.
+
+Add `--library demo-input/library.nc` for the synthetic NNLS example.
+A library contains `measured(SPE, material)` values averaged with the input
+sensor's band responses and `reflectance(library_SPE, material)` spectra on
+its oversampled wavelength grid. The supplied example uses synthetic point-sampled
+bands over 500–600 nm, not the full CHIME spectrum.
+
+Py6S requires a separately installed 6S executable; its
+[installation guide](https://py6s.readthedocs.io/en/latest/installation.html)
+describes the conda and source-build options. The 6SV1.1 adapter runs on a
+2.5 nm grid and interpolates physical quantities to the scene wavelengths.
+This does not resolve finer atmospheric features. Quantities and solver settings
+are saved in `atmosphere.nc` beside the radiance product. Use
+`--atmosphere path/to/atmosphere.nc` to reuse quantities or supply another
+solver's compatible `SPE` arrays. The file may contain the gas/downward/upward
+transmission and solar irradiance inputs, or already combined `transmission`
+and `solar_scale`, together with path radiance and spherical albedo.
+
+The YAML also accepts `run_options` (EOPL precision and execution settings),
+`breakpoints: true` to save operation checkpoints, and a `report` mapping with
+EOPL report parameters. All image I/O and module logging use EOPL.
+
+With `.[dev,pipeline]` installed, run `python -m pytest`. Set `SIXS_PATH` to the
+executable to include direct 6S comparisons. Tests check individual equations,
+operation order and agreement between memory and save/reload module handoffs.
 
 ## Citation and license
 

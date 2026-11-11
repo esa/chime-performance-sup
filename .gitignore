@@ -7,3 +7,8 @@ __pycache__/
 .venv/
 build/
 dist/
+demo-input/
+outputs/
+*.nbc
+*.nbi
+.local-tools/
