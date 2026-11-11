@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 # Uniformity tolerance on the spectral grid. Structural, not a performance number.
 _SPACING_RTOL = 1e-9

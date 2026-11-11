@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,11 @@ version = "0.1.0"
 description = "Parametric performance model for CHIME (Copernicus Hyperspectral Imaging Mission for the Environment)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "CHIME Project" },
+]
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
@@ -24,11 +28,17 @@ dev = [
     "mypy>=1.8",
 ]
 
+[project.urls]
+Repository = "https://github.com/esa/chime-performance-sup"
+Issues = "https://github.com/esa/chime-performance-sup/issues"
+Paper = "https://spie.org/spie-sensors-imaging/presentation/CHIME-system-performance-at-critical-design-review--a-parametric/14279-7"
+
 [tool.setuptools]
 packages = ["chime_perf"]
+include-package-data = false
 
 [tool.setuptools.package-data]
-chime_perf = ["py.typed"]
+chime_perf = ["data/*.csv", "data/*.yml", "data/*.txt"]
 
 [tool.ruff]
 line-length = 95
