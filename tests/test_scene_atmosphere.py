@@ -193,6 +193,19 @@ def test_all_matches_standalone_modules(tmp_path, reflectance, atmosphere, disk_
     """Memory and save/reload handoffs produce the same independently expected radiance."""
     from chime_perf.run import main
 
+    # A wider, densely sampled spectrum also covers the instrument response tails.
+    wave = np.arange(480.0, 621.0)
+    image = (
+        reflectance.image()
+        .mean("SPE", keep_attrs=True)
+        .expand_dims(SPE=wave)
+        .transpose("ACT", "ALT", "SPE")
+    )
+    image.SPE.attrs["units"] = "nm"
+    reflectance = eopl.image_t(image.rename("reflectance"))
+    atmosphere = atmosphere.interp(SPE=wave, kwargs={"fill_value": "extrapolate"})
+    atmosphere.SPE.attrs["units"] = "nm"
+
     input_path = tmp_path / "input.nc"
     reflectance.image().to_netcdf(input_path)
     atmosphere_path = tmp_path / "atmosphere.nc"

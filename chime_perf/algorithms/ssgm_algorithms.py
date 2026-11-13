@@ -41,10 +41,10 @@ def spatial_grid(coordinates, detector_spacing_m, oversampling="auto"):
 
 def validate_spatial_sampling(data, detector_spacing_m):
     """Require regular ACT and ALT grids with integer detector-to-scene spacing ratios."""
-    reflectance = reflectance_image(data)
+    image = data.image()
 
     for dimension in ("ACT", "ALT"):
-        coordinates = reflectance[dimension].values
+        coordinates = image[dimension].values
         _, factor = spatial_grid(coordinates, detector_spacing_m)
         step_m = detector_spacing_m / factor
 

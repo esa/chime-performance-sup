@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from chime_perf.athmo import athmo
+from chime_perf.instrument import instrument
 from chime_perf.ssgm import ssgm
 
 
@@ -16,10 +17,13 @@ def parse_arguments(argv=None):
     modules.add_argument(
         "--athmo", "--athm", action="store_true", help="Run atmospheric propagation"
     )
+    modules.add_argument(
+        "--instrument", action="store_true", help="Run instrument acquisition"
+    )
     modules.add_argument("--all", action="store_true", help="Run modules in processing order")
 
     parser.add_argument(
-        "--input", type=Path, required=True, help="Input BOA reflectance NetCDF"
+        "--input", type=Path, required=True, help="Input module product NetCDF"
     )
     parser.add_argument("--output", type=Path, required=True, help="Output directory")
     parser.add_argument("--config", type=Path, help="YAML configuration")
@@ -56,6 +60,14 @@ def main(argv=None):
             sixs_path=args.sixs_path,
         )
 
+    elif args.instrument:
+        instrument(
+            input_path=args.input,
+            output_root=args.output,
+            config_path=args.config,
+            atmosphere_path=args.atmosphere,
+        )
+
     elif args.all:
         # In memory, each module receives the image returned by the previous one.
         scene = ssgm(
@@ -70,13 +82,21 @@ def main(argv=None):
         if args.save_intermediates:
             scene = None
 
-        athmo(
+        radiance = athmo(
             input_path=args.output / "ssgm" / "scene.nc",
             output_root=args.output / "athmo",
             config_path=args.config,
             atmosphere_path=args.atmosphere,
             sixs_path=args.sixs_path,
             data=scene,
+        )
+
+        # Propagation always archives its coefficients, including with in-memory handoff.
+        instrument(
+            input_path=args.output / "athmo" / "toa.nc",
+            output_root=args.output / "instrument",
+            config_path=args.config,
+            data=None if args.save_intermediates else radiance,
         )
 
 

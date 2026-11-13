@@ -8,7 +8,7 @@ breakpoints: false
 report:
   report_format: ipynb       # Use py for a runnable Python report.
   generate_input: true
-  plot_2d_indexes: [:,:,0]
+  plot_2d_indexes: [0]
 
 scene:
   spatial_interpolation: true
@@ -27,3 +27,16 @@ atmosphere:
   target_altitude_km: 0.0
   month: 6
   day: 21
+
+# The instrument keeps only channels whose complete response is inside the input spectrum.
+instrument:
+  seed: 42
+  heading_deg: 0.0
+  fwhm_nm: 10.0
+  spectral_error_sigma_nm: 0.0
+  spectral_error_common_fraction: 0.0
+  temporal_noise: true
+  ara_gain_coefficient: 0.0   # +1/-1 select the positive/negative ARA gain envelope.
+  ara_offset_coefficient: 0.0 # +1/-1 select the positive/negative offset envelope.
+  rxra: true
+  edge_mode: reflect        # Use valid to discard centres without full spatial support.

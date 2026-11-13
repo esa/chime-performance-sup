@@ -80,6 +80,9 @@ owns its EOPL Pipeline and schedules the individual mathematical operations:
 - `chime_perf/ssgm.py`: spatial interpolation; spectral interpolation, or NNLS
   fitting followed by spectral reconstruction. Algorithms are in
   `chime_perf/algorithms/ssgm_algorithms.py`.
+- `chime_perf/instrument.py`: spectral integration, sensor rotation, fused spatial
+  convolution and detector sampling, temporal noise, ARA and RXRA. Image operations
+  are in `chime_perf/algorithms/acquisition_algorithms.py`.
 - `chime_perf/athmo.py`: transmission, solar radiance scaling and atmospheric
   propagation. Algorithms and the 6S adapter are in
   `chime_perf/algorithms/athmo_algorithms.py`.
@@ -92,10 +95,12 @@ The radiometric, spectral and spatial performance equations are grouped in
 python example/setup_scene.py
 chime-sup --ssgm --input demo-input/reflectance.nc --output outputs/scene --config example/pipeline.yml
 chime-sup --athmo --input outputs/scene/scene.nc --output outputs/atmosphere --sixs-path /path/to/sixs
+chime-sup --instrument --input outputs/atmosphere/toa.nc --output outputs/instrument --config example/pipeline.yml
 ```
 
 Select `--all` to compose the modules in processing order. Images are passed
-in memory, with only the final module saving its products:
+in memory. Propagation also saves `athmo/toa.nc` with its atmospheric coefficients;
+the instrument copies them unchanged into `instrument/instrument.nc`:
 
 ```bash
 chime-sup --all --input demo-input/reflectance.nc --output outputs/chain --config example/pipeline.yml --sixs-path /path/to/sixs
@@ -164,9 +169,22 @@ solver's compatible `SPE` arrays. The file may contain the gas/downward/upward
 transmission and solar irradiance inputs, or already combined `transmission`
 and `solar_scale`, together with path radiance and spherical albedo.
 
+Instrument settings are shown in `example/pipeline.yml`. Only nominal channels
+with complete +/-4-sigma spectral coverage are simulated; missing wavelengths are
+not extrapolated. Spatial convolution is evaluated only at retained detector centres.
+`edge_mode: reflect` mirrors the scene at its boundaries; `valid` keeps only centres
+with complete kernel support, preserving the original sampling phase. Rotation masks
+positions outside the source scene. The map coordinates remain in the output product.
+
+Noise and RXRA are enabled independently; ARA gain and offset default to zero.
+A fixed seed reproduces the saved noise, column gains and spectral shifts. Set
+`temporal_noise: false` and `rxra: false`, keeping both ARA coefficients zero, for
+an error-free radiometric case. Spectral shifts default to zero. Changing their
+standard deviation can require wider input spectral coverage.
+
 The YAML also accepts `run_options` (EOPL precision and execution settings),
 `breakpoints: true` to save operation checkpoints, and a `report` mapping with
-EOPL report parameters. All image I/O and module logging use EOPL.
+EOPL report parameters. EOPL records operations, generates products and reports, and handles module logging.
 
 With `.[dev,pipeline]` installed, run `python -m pytest`. Set `SIXS_PATH` to the
 executable to include direct 6S comparisons. Tests check individual equations,
