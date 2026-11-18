@@ -26,8 +26,9 @@ spectral and spatial performance functions, CDR-2025 parameters and an example n
 Still to come: A full mini E2E reference implementation including scene generation, atmospheric propagation and correction
 
 Roadmap:
-- Oct 2026 First formal issue including full E2E implementation
+- Oct/Nov 2026 First release
 - Nov 2026 Iterations as part of SUP workshop in ESRIN
+- Dec 2027 v1.0 including full e2e first implementation
 - Updates and maintenance throughout Phase D
 - End of 2028 Update of Instrument modelling after Instrument level TVAC Characterisation 
 
