@@ -20,7 +20,7 @@ def test_psf_kernel_is_normalized_symmetric_and_centered():
 
     kernel = psf_kernel(1.0, 2.0)
 
-    assert kernel.shape == (17, 17)
+    assert kernel.shape == (13, 13)
     assert kernel.sum() == pytest.approx(1.0)
     assert np.all(kernel >= 0)
 
@@ -28,7 +28,7 @@ def test_psf_kernel_is_normalized_symmetric_and_centered():
     np.testing.assert_allclose(kernel, kernel[::-1, :])
     np.testing.assert_allclose(kernel, kernel[:, ::-1])
 
-    assert kernel[8, 8] == kernel.max()
+    assert kernel[6, 6] == kernel.max()
 
 
 def test_psf_kernel_keeps_across_and_along_track_axes_in_order():
@@ -86,7 +86,7 @@ def test_psf_kernel_rejects_invalid_sizes(size):
 
 
 def test_kernel_support_sets_the_full_padding_radius():
-    """Four sigma rounds upward, so the odd kernel covers both response tails."""
-    kernel = psf_kernel(1.2, 2.1, support_sigma=4)
-    assert kernel.shape == (19, 19)
+    """Three sigma rounds upward, so the odd kernel covers both response tails."""
+    kernel = psf_kernel(1.2, 2.1, support_sigma=3)
+    assert kernel.shape == (15, 15)
     assert kernel.sum() == pytest.approx(1)

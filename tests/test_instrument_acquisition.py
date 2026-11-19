@@ -80,7 +80,7 @@ def test_spectral_integration_matches_weighted_sum(radiance):
 
     wave = radiance.image().SPE.values
     weights = np.exp(-0.5 * ((wave[None, :] - np.array([530, 570])[:, None]) / 4) ** 2)
-    weights *= abs(wave[None, :] - np.array([530, 570])[:, None]) <= 16
+    weights *= abs(wave[None, :] - np.array([530, 570])[:, None]) <= 12
     weights /= weights.sum(axis=1, keepdims=True)
     np.testing.assert_allclose(result, radiance.image().values @ weights.T)
 
@@ -164,16 +164,17 @@ def test_zero_radiance_has_finite_noise_and_offset(radiance):
     np.testing.assert_allclose(offset.image(), 300.0)
 
 
-def test_shared_spectral_error_and_missing_coverage(radiance):
-    """A fully shared error has one shift, and insufficient response coverage is rejected."""
+def test_shared_spectral_error_and_edge_padding(radiance):
+    """A fully shared shift stays fixed, and missing response tails use edge samples."""
     centres = channel_centres(
         radiance, [530.0, 570.0], 30, 30, 0.5, 1, np.random.default_rng(4)
     )
     shifts = centres.image().values - np.array([530, 570])
     np.testing.assert_allclose(shifts, np.full(shifts.shape, shifts[0, 0]))
 
-    with pytest.raises(ValueError, match="cover"):
-        spectral_response(centres, [529, 530, 531], 4.0)
+    response = spectral_response(centres, [529, 530, 531], 4.0).image()
+    np.testing.assert_allclose(response.sum("sample_SPE"), 1)
+    assert response.attrs["padding_samples_right"] > 0
 
 
 def test_instrument_preserves_atmosphere_and_repeats_seed(tmp_path, propagation_product):
@@ -251,3 +252,57 @@ def test_spatial_operations_reject_other_boundary_modes(radiance, mode):
         rotate_to_sensor(radiance, 20, edge_mode=mode)
     with pytest.raises(ValueError, match="Only edge padding"):
         convolve_downsample(radiance, np.ones((3, 3)) / 9, 1, 1, edge_mode=mode)
+
+
+def test_spectral_padding_matches_explicit_edge_extension(radiance):
+    """Folded tail weights equal explicitly padding the image and atmospheric quantities."""
+    from chime_perf.algorithms.reconstruction_algorithms import average_atmosphere
+
+    source = eopl.image_t(radiance.image().sel(SPE=slice(500, 600)))
+    centres = channel_centres(source, [500.0, 600.0], 30, 0, 0, 0, np.random.default_rng(1))
+    response = spectral_response(centres, source.image().SPE.values, 4.0)
+    result = integrate_spectral(source, response, 30, 0).image()
+
+    # Sigma is 4 nm; a 3-sigma kernel needs 12 extra 1-nm samples on each side.
+    padded_nm = np.arange(488.0, 613.0)
+    weights = np.exp(-0.5 * ((padded_nm[None, :] - np.array([500, 600])[:, None]) / 4) ** 2)
+    weights *= abs(padded_nm[None, :] - np.array([500, 600])[:, None]) <= 12
+    weights /= weights.sum(axis=1, keepdims=True)
+    padded = np.pad(source.image().values, ((0, 0), (0, 0), (12, 12)), mode="edge")
+    np.testing.assert_allclose(result, padded @ weights.T)
+    assert result.sizes["SPE"] == 2
+
+    quantity = source.image().isel(ACT=0, ALT=0, drop=True)
+    nominal_response = response.image().isel(detector_column=0, drop=True)
+    averaged = average_atmosphere(eopl.image_t(quantity), eopl.image_t(nominal_response))
+    np.testing.assert_allclose(
+        averaged.image(), weights @ np.pad(quantity.values, 12, mode="edge")
+    )
+
+
+def test_channels_near_spectral_edges_are_kept():
+    """Nominal centres inside the input range remain available even without full tails."""
+    from types import SimpleNamespace
+
+    from chime_perf.algorithms.acquisition_algorithms import select_channels
+
+    parameters = SimpleNamespace(wavelength_nm=np.array([499, 500, 550, 600, 601]))
+    np.testing.assert_array_equal(select_channels([500, 600], parameters), [1, 2, 3])
+
+
+def test_aviris_wavelength_extent_keeps_all_chime_channels(radiance):
+    """An AVIRIS-like wavelength range retains all 250 channels, padding the final tails."""
+    from chime_perf.algorithms.acquisition_algorithms import select_channels
+    from chime_perf.algorithms.instrument_algorithms import isrf_sigma
+    from chime_perf.params import ChimeParams
+
+    parameters = ChimeParams.load()
+    wave = np.arange(370.0, 2507.0)
+    indices = select_channels(wave, parameters)
+    assert indices.size == 250
+    centres = channel_centres(
+        radiance, parameters.wavelength_nm[indices], 30, 0, 0, 0, np.random.default_rng(1)
+    )
+    response = spectral_response(centres, wave, isrf_sigma(parameters.isrf_fwhm_nm))
+    np.testing.assert_allclose(response.image().sum("sample_SPE"), 1)
+    assert response.image().attrs["padding_samples_right"] > 0

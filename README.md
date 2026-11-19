@@ -191,22 +191,29 @@ solver's compatible `SPE` arrays. The file may contain the gas/downward/upward
 transmission and solar irradiance inputs, or already combined `transmission`
 and `solar_scale`, together with path radiance and spherical albedo.
 
-Instrument settings are shown in `example/pipeline.yml`. Only nominal channels
-with complete +/-4-sigma spectral coverage are simulated; missing wavelengths are
-not extrapolated. Spatial convolution is evaluated only at retained detector centres.
-The shared `boundaries` settings are fixed to `spatial: edge` and
-`kernel_support_sigma: 4`. Rotation and spatial convolution repeat the nearest
+Instrument settings are shown in `example/pipeline.yml`. Nominal channel centres
+inside the input wavelength range are simulated, with +/-3-sigma response support.
+Response tails outside that range repeat the nearest available spectral value.
+Spatial convolution is evaluated only at retained detector centres.
+The shared `boundaries` settings are fixed to `spatial: edge`, `spectral: edge` and
+`kernel_support_sigma: 3`. Rotation and spatial convolution repeat the nearest
 boundary values outside the scene; no detector centres are cropped and spatial
 boundaries introduce no NaNs. Genuine missing input values remain missing.
 Convolution padding covers the complete kernel radius, and the detector sampling
-origin and requested map coordinates are retained. Spectral response still requires
-real wavelength coverage; spatial edge padding does not invent missing spectra.
+origin and requested map coordinates are retained. Spectral padding extends response
+tails only; it does not generate channels whose
+nominal centres lie outside the input range. Reconstruction uses the same edge
+extension when averaging the saved atmospheric coefficients. This is a simple
+constant-extension approximation, not a reconstruction of unresolved spectral features.
 
 Noise and RXRA are enabled independently; ARA gain and offset default to zero.
 A fixed seed reproduces the saved noise, column gains and spectral shifts. Set
 `temporal_noise: false` and `rxra: false`, keeping both ARA coefficients zero, for
-an error-free radiometric case. Spectral shifts default to zero. Changing their
-standard deviation can require wider input spectral coverage.
+an error-free radiometric case. Spectral shifts default to zero; their response
+tails use the same edge extension.
+The existing SSGM `--library` route can instead reconstruct scene spectra from
+fitted material mixtures before atmospheric propagation, within the supplied
+library coverage; library spectra are surface reflectance, not TOA radiance.
 
 Reconstruction never calls 6S. Propagation saves its `path_radiance`,
 `spherical_albedo`, `transmission` and `solar_scale` in `toa.nc`. A saved instrument

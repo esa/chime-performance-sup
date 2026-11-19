@@ -6,54 +6,78 @@ from eopl import image_t
 from scipy.interpolate import RegularGridInterpolator
 
 from chime_perf.algorithms.algorithms import require_units
-from chime_perf.algorithms.instrument_algorithms import isrf_sigma
 
 
-def spectral_response(centres, wavelength_nm, sigma_nm, support_sigma=4):
-    """Normalise the Gaussian response, including each sample's wavelength width."""
+def spectral_response(centres, wavelength_nm, sigma_nm, support_sigma=3):
+    """Normalise Gaussian channel responses, repeating edge samples for missing tails."""
     wavelength_nm = np.asarray(wavelength_nm, dtype=float)
-    if wavelength_nm.size < 2 or np.any(np.diff(wavelength_nm) <= 0):
-        raise ValueError("Input wavelengths must be strictly increasing.")
+    if (
+        wavelength_nm.size < 2
+        or not np.isfinite(wavelength_nm).all()
+        or np.any(np.diff(wavelength_nm) <= 0)
+    ):
+        raise ValueError("Input wavelengths must be finite and strictly increasing.")
 
     centre = centres.image()
     require_units(centre, "nm")
-    # The extra axis compares every channel centre with every input wavelength.
-    distance = wavelength_nm - centre.values[..., None]
     sigma_nm = np.asarray(sigma_nm)
     if np.any(sigma_nm <= 0) or not np.isfinite(sigma_nm).all():
         raise ValueError("Spectral response widths must be finite and positive.")
-
+    if not np.isfinite(centre.values).all():
+        raise ValueError("Channel centres must be finite.")
     if not np.isfinite(support_sigma) or support_sigma <= 0:
         raise ValueError("Kernel support must be finite and positive.")
 
-    # Include the response tails out to the declared number of standard deviations.
-    if np.any(centre.values - support_sigma * sigma_nm < wavelength_nm[0]) or np.any(
-        centre.values + support_sigma * sigma_nm > wavelength_nm[-1]
-    ):
-        raise ValueError(
-            "Input wavelengths must cover each channel's complete response support."
+    # Extend wavelengths at each edge's sampling interval to cover every response tail.
+    radius = support_sigma * sigma_nm
+    lower = float(np.min(centre.values - radius))
+    upper = float(np.max(centre.values + radius))
+    step_left = wavelength_nm[1] - wavelength_nm[0]
+    step_right = wavelength_nm[-1] - wavelength_nm[-2]
+    left = max(0, int(np.ceil((wavelength_nm[0] - lower) / step_left)))
+    right = max(0, int(np.ceil((upper - wavelength_nm[-1]) / step_right)))
+    padded_nm = np.concatenate(
+        (
+            wavelength_nm[0] - step_left * np.arange(left, 0, -1),
+            wavelength_nm,
+            wavelength_nm[-1] + step_right * np.arange(1, right + 1),
         )
+    )
 
+    # The extra axis compares every channel centre with every input wavelength.
+    distance = padded_nm - centre.values[..., None]
     response = np.exp(-0.5 * (distance / sigma_nm[..., None]) ** 2)
-    response *= np.abs(distance) <= support_sigma * sigma_nm[..., None]
-    response *= np.gradient(wavelength_nm)
-    total = response.sum(axis=-1, keepdims=True)
+    response *= np.abs(distance) <= radius[..., None]
+    response *= np.gradient(padded_nm)
+
+    # Padded values equal the nearest edge sample. Add their weights to that sample
+    # instead of allocating a padded copy of every image spectrum.
+    count = wavelength_nm.size
+    weights = response[..., left : left + count].copy()
+    weights[..., 0] += response[..., :left].sum(axis=-1)
+    weights[..., -1] += response[..., left + count :].sum(axis=-1)
+    total = weights.sum(axis=-1, keepdims=True)
     if np.any(total == 0):
         raise ValueError(
             "Input spectral sampling is too sparse to resolve a channel response."
         )
-    response /= total
+    weights /= total
 
     coords = {name: centre[name] for name in centre.dims}
     coords["sample_SPE"] = wavelength_nm
-    weights = xr.DataArray(
-        response,
+    image = xr.DataArray(
+        weights,
         dims=(*centre.dims, "sample_SPE"),
         coords=coords,
         name=centre.name,
-        attrs={"units": "1"},
+        attrs={
+            "units": "1",
+            "spectral_edge_mode": "edge",
+            "padding_samples_left": left,
+            "padding_samples_right": right,
+        },
     )
-    return image_t(weights)
+    return image_t(image)
 
 
 def sensor_coordinates(image, heading_deg):
@@ -302,15 +326,14 @@ def apply_striping(data, gains):
     return image_t(source.copy(data=values.data))
 
 
-def select_channels(wavelength_nm, parameters, fwhm_nm, support_sigma=4):
-    """Keep nominal channels whose Gaussian response is covered by the input."""
-    sigma = isrf_sigma(float(fwhm_nm))
+def select_channels(wavelength_nm, parameters):
+    """Keep nominal centres inside the input range; response tails use edge padding."""
     centres = parameters.wavelength_nm
-    covered = (centres - support_sigma * sigma >= wavelength_nm[0]) & (
-        centres + support_sigma * sigma <= wavelength_nm[-1]
-    )
+    covered = (centres >= wavelength_nm[0]) & (centres <= wavelength_nm[-1])
     if not covered.any():
-        raise ValueError("The input spectrum does not cover any full CHIME channel response.")
+        raise ValueError(
+            "The input wavelength range contains no nominal CHIME channel centres."
+        )
     return np.flatnonzero(covered)
 
 

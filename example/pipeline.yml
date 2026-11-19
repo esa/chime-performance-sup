@@ -7,7 +7,8 @@ breakpoints: false
 # Fixed policy: repeat nearest edge values, including during rotation; do not crop centres.
 boundaries:
   spatial: edge
-  kernel_support_sigma: 4
+  spectral: edge
+  kernel_support_sigma: 3
 
 # Show the input and final output; other report sections stay disabled.
 report:
@@ -33,7 +34,7 @@ atmosphere:
   month: 6
   day: 21
 
-# The instrument keeps only channels whose complete response is inside the input spectrum.
+# Keep channel centres inside the input range; repeat edge values for response tails.
 instrument:
   seed: 42
   heading_deg: 0.0

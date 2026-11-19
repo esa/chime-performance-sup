@@ -91,7 +91,7 @@ def psf_kernel(
     sigma_act_px: float,
     sigma_alt_px: float,
     size: int | None = None,
-    support_sigma: float = 4.0,
+    support_sigma: float = 3.0,
 ) -> np.ndarray:
     """Separable 2-D Gaussian PSF kernel (ACT, ALT), normalised to 1 (Eq. 11, §5).
 

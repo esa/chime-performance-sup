@@ -100,7 +100,7 @@ def test_spectral_atmosphere_uses_nominal_band_weights(tmp_path, instrument_prod
 
     centre = product.SPE.values
     weight = np.exp(-0.5 * ((wave[None, :] - centre[:, None]) / (10 / 2.354820045)) ** 2)
-    weight *= abs(wave[None, :] - centre[:, None]) <= 4 * (10 / 2.354820045)
+    weight *= abs(wave[None, :] - centre[:, None]) <= 3 * (10 / 2.354820045)
     weight /= weight.sum(axis=1, keepdims=True)
     averaged_path = weight @ product.path_radiance.values
     y = (product.radiance.values - averaged_path) / 100 / 0.8

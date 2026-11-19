@@ -89,6 +89,8 @@ def reconstruction(
         if fwhm is None:
             raise ValueError("The instrument product must record its nominal response width.")
 
+    support_sigma = image.attrs.get("kernel_support_sigma", boundaries["kernel_support_sigma"])
+
     # 2. OPERATION PHASE
     # Step 1: Average the saved C, T, S and P with the UNSHIFTED channel response.
     # This is a band approximation: averaging does not commute with the nonlinear
@@ -101,7 +103,7 @@ def reconstruction(
         args={
             "wavelength_nm": original_nm,
             "sigma_nm": sigma,
-            "support_sigma": boundaries["kernel_support_sigma"],
+            "support_sigma": support_sigma,
         },
     )
 

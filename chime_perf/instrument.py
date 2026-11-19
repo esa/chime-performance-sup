@@ -100,9 +100,7 @@ def instrument(
     if parameters is None:
         parameters = ChimeParams.load()
     fwhm = float(settings.get("fwhm_nm", parameters.isrf_fwhm_nm))
-    indices = select_channels(
-        source.SPE.values, parameters, fwhm, boundaries["kernel_support_sigma"]
-    )
+    indices = select_channels(source.SPE.values, parameters)
     nominal_nm = parameters.wavelength_nm[indices]
     lref = parameters.lref[indices]
     g = parameters.snr_g[indices]
@@ -226,6 +224,7 @@ def instrument(
         random_seed=int(seed),
         nominal_fwhm_nm=fwhm,
         kernel_support_sigma=boundaries["kernel_support_sigma"],
+        spectral_edge_mode=boundaries["spectral"],
         ara_gain=float(gain),
         ara_offset_coefficient=float(settings.get("ara_offset_coefficient", 0)),
     )
