@@ -401,3 +401,45 @@ def test_interpolation_preserves_custom_name_and_units(reflectance, operation, s
     assert result.attrs["units"] == "K"
     assert result.SPE.attrs["units"] == "nm"
     xr.testing.assert_identical(reflectance.image(), original)
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("spacing", [(4, 4), (6, 4), (4, 6), (6, 6), (5.5, 5.5)])
+def test_spatial_interpolation_matches_xarray_with_missing_samples(dtype, spacing):
+    """The compiled equation matches Xarray, including masks and auxiliary coordinates."""
+    rng = np.random.default_rng(42)
+    values = rng.random((8, 9, 3)).astype(dtype)
+    values[0, 0, :] = np.nan
+    values[3, 4, 1] = np.nan
+    image = xr.DataArray(
+        values,
+        dims=("ACT", "ALT", "SPE"),
+        coords={
+            "ACT": 10 + np.arange(8) * spacing[0],
+            "ALT": -20 + np.arange(9) * spacing[1],
+            "SPE": [500, 510, 520],
+        },
+        name="user_surface",
+        attrs={"units": "1"},
+    )
+    image.ACT.attrs["units"] = "m"
+    image.ALT.attrs["units"] = "m"
+    image = image.assign_coords(height=100 + image.ACT / 10 + image.ALT / 20)
+    original = image.copy(deep=True)
+    expected = image
+
+    # This is the original implementation, used only as an independent reference.
+    for dimension in ("ACT", "ALT"):
+        target, _ = spatial_grid(image[dimension].values, 30)
+        if not np.array_equal(target, image[dimension].values):
+            expected = expected.interp({dimension: target}, method="linear")
+
+    actual = interpolate_spatial(eopl.image_t(image)).image()
+
+    np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
+    xr.testing.assert_allclose(actual, expected, rtol=1e-13, atol=1e-13)
+    xr.testing.assert_identical(image, original)
+    assert actual.name == image.name
+    assert actual.attrs["units"] == "1"
+    assert actual.ACT.attrs == image.ACT.attrs
+    assert actual.ALT.attrs == image.ALT.attrs

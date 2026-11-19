@@ -55,6 +55,36 @@ def validate_spatial_sampling(data, detector_spacing_m):
             )
 
 
+@njit(cache=True)
+def interpolate_spatial_axis(values, source_m, target_m, axis):
+    """Apply linear interpolation along ACT or ALT without full-image temporaries."""
+    shape = list(values.shape)
+    shape[axis] = len(target_m)
+    result = np.empty((shape[0], shape[1], shape[2]))
+
+    # Each requested position lies between two neighbouring source samples.
+    upper = np.searchsorted(source_m, target_m)
+
+    for i in range(len(target_m)):
+        hi = min(max(upper[i], 1), len(source_m) - 1)
+        lo = hi - 1
+        distance = target_m[i] - source_m[lo]
+        spacing = source_m[hi] - source_m[lo]
+
+        if axis == 0:
+            for j in range(values.shape[1]):
+                for k in range(values.shape[2]):
+                    slope = (values[hi, j, k] - values[lo, j, k]) / spacing
+                    result[i, j, k] = values[lo, j, k] + slope * distance
+        else:
+            for j in range(values.shape[0]):
+                for k in range(values.shape[2]):
+                    slope = (values[j, hi, k] - values[j, lo, k]) / spacing
+                    result[j, i, k] = values[j, lo, k] + slope * distance
+
+    return result
+
+
 def interpolate_spatial(data, detector_spacing_m=30.0, oversampling="auto"):
     """Interpolate ACT and ALT onto grids with integer spatial oversampling."""
     source = data.image().transpose("ACT", "ALT", "SPE")
@@ -66,11 +96,25 @@ def interpolate_spatial(data, detector_spacing_m=30.0, oversampling="auto"):
     # Existing missing samples remain NaN; no points outside the scene are requested.
     result = source.copy(deep=False)
 
-    if not np.array_equal(act, source.ACT.values):
-        result = result.interp(ACT=act, method="linear")
+    for axis, target in enumerate((act, alt)):
+        dimension = source.dims[axis]
+        original = result[dimension].values
 
-    if not np.array_equal(alt, source.ALT.values):
-        result = result.interp(ALT=alt, method="linear")
+        if np.array_equal(target, original):
+            continue
+
+        values = interpolate_spatial_axis(result.values, original, target, axis)
+
+        # Xarray handles coordinate attributes and auxiliary coordinates only;
+        # Numba applies the image equation into one preallocated output array.
+        coordinates = result.coords.to_dataset().interp({dimension: target}).coords
+        result = xr.DataArray(
+            values,
+            dims=result.dims,
+            coords=coordinates,
+            name=source.name,
+            attrs=source.attrs.copy(),
+        )
 
     result.attrs = {
         **source.attrs,
