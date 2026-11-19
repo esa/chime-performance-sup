@@ -25,7 +25,7 @@ from chime_perf.algorithms.acquisition_algorithms import (
 )
 from chime_perf.algorithms.instrument_algorithms import isrf_sigma, psf_kernel, psf_sigma_px
 from chime_perf.algorithms.ssgm_algorithms import validate_spatial_sampling
-from chime_perf.params import ChimeParams
+from chime_perf.params import ChimeParams, boundary_settings
 
 
 def instrument(
@@ -82,6 +82,9 @@ def instrument(
     data = image_t(source)
 
     settings = pl.local_config.get("instrument", {})
+    boundaries = boundary_settings(pl.local_config)
+    if "edge_mode" in settings:
+        raise ValueError("Replace instrument.edge_mode with boundaries.spatial: edge.")
     spacing_m = float(pl.local_config.get("scene", {}).get("detector_spacing_m", 30.0))
     validate_spatial_sampling(data, spacing_m)
     factors = [
@@ -97,7 +100,9 @@ def instrument(
     if parameters is None:
         parameters = ChimeParams.load()
     fwhm = float(settings.get("fwhm_nm", parameters.isrf_fwhm_nm))
-    indices = select_channels(source.SPE.values, parameters, fwhm)
+    indices = select_channels(
+        source.SPE.values, parameters, fwhm, boundaries["kernel_support_sigma"]
+    )
     nominal_nm = parameters.wavelength_nm[indices]
     lref = parameters.lref[indices]
     g = parameters.snr_g[indices]
@@ -126,7 +131,11 @@ def instrument(
     response = pl.run_operation(
         data=centres,
         func=spectral_response,
-        args={"wavelength_nm": source.SPE.values, "sigma_nm": sigma},
+        args={
+            "wavelength_nm": source.SPE.values,
+            "sigma_nm": sigma,
+            "support_sigma": boundaries["kernel_support_sigma"],
+        },
     )
 
     # Step 4: Integrate the oversampled spectrum at each channel response.
@@ -138,7 +147,11 @@ def instrument(
     data = pl.save_bkp(data, "spectral_response")
 
     # Step 5: Interpolate map radiance onto the sensor's rotated ACT--ALT grid.
-    data = pl.run_operation(data=data, func=rotate_to_sensor, args={"heading_deg": heading})
+    data = pl.run_operation(
+        data=data,
+        func=rotate_to_sensor,
+        args={"heading_deg": heading, "edge_mode": boundaries["spatial"]},
+    )
 
     # Step 6: Spatial Gaussian widths, in oversampled-grid pixels.
     sigma_act = pl.run_function(
@@ -150,7 +163,12 @@ def instrument(
 
     # Step 7: Construct the normalised spatial response kernel.
     kernel = pl.run_function(
-        psf_kernel, args={"sigma_act_px": sigma_act, "sigma_alt_px": sigma_alt}
+        psf_kernel,
+        args={
+            "sigma_act_px": sigma_act,
+            "sigma_alt_px": sigma_alt,
+            "support_sigma": boundaries["kernel_support_sigma"],
+        },
     )
 
     # Steps 8--9: Convolve only at the nominal centres; do not blur the whole cube.
@@ -161,7 +179,7 @@ def instrument(
             "kernel": kernel,
             "factor_act": factors[0],
             "factor_alt": factors[1],
-            "edge_mode": settings.get("edge_mode", "reflect"),
+            "edge_mode": boundaries["spatial"],
         },
     )
     signal = pl.save_bkp(signal, "spatial_response")
@@ -207,6 +225,7 @@ def instrument(
         parameter_version=parameters.version,
         random_seed=int(seed),
         nominal_fwhm_nm=fwhm,
+        kernel_support_sigma=boundaries["kernel_support_sigma"],
         ara_gain=float(gain),
         ara_offset_coefficient=float(settings.get("ara_offset_coefficient", 0)),
     )

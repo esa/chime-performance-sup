@@ -37,6 +37,7 @@ def toa_reflectance(data, solar_scale):
     require_units(source, "W m-2 sr-1 um-1")
     scale = solar_scale.image()
     require_units(scale, "W m-2 sr-1 um-1")
+    # Xarray repeats the SPE-only scale across the image's ACT and ALT axes.
     result = source / scale.where(np.isfinite(scale) & (scale > 0))
     result = source.copy(data=result.transpose(*source.dims).data)
     result.attrs["units"] = "1"

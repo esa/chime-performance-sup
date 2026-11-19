@@ -83,3 +83,10 @@ def test_psf_kernel_rejects_invalid_sizes(size):
 
     with pytest.raises(ValueError, match="positive odd"):
         psf_kernel(1.0, 1.0, size=size)
+
+
+def test_kernel_support_sets_the_full_padding_radius():
+    """Four sigma rounds upward, so the odd kernel covers both response tails."""
+    kernel = psf_kernel(1.2, 2.1, support_sigma=4)
+    assert kernel.shape == (19, 19)
+    assert kernel.sum() == pytest.approx(1)

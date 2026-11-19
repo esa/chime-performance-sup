@@ -252,3 +252,20 @@ def _read_csv(path: Path, columns: list[str]) -> dict[str, np.ndarray]:
     return {
         name: np.array([float(row[name]) for row in rows], dtype=float) for name in columns
     }
+
+
+def boundary_settings(config):
+    """Read the shared boundary policy; only edge extension and 4-sigma support are used."""
+    supplied = config.get("boundaries", {})
+    if not isinstance(supplied, dict):
+        raise ValueError("boundaries must be a YAML mapping.")
+
+    settings = {"spatial": "edge", "kernel_support_sigma": 4}
+    if set(supplied) - set(settings):
+        raise ValueError("boundaries accepts only spatial and kernel_support_sigma.")
+    settings.update(supplied)
+    if settings["spatial"] != "edge" or settings["kernel_support_sigma"] != 4:
+        raise ValueError(
+            "Use boundaries.spatial: edge and boundaries.kernel_support_sigma: 4."
+        )
+    return settings

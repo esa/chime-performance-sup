@@ -4,6 +4,11 @@ run_options:
 
 breakpoints: false
 
+# Fixed policy: repeat nearest edge values, including during rotation; do not crop centres.
+boundaries:
+  spatial: edge
+  kernel_support_sigma: 4
+
 # Show the input and final output; other report sections stay disabled.
 report:
   report_format: ipynb       # Use py for a runnable Python report.
@@ -39,4 +44,3 @@ instrument:
   ara_gain_coefficient: 0.0   # +1/-1 select the positive/negative ARA gain envelope.
   ara_offset_coefficient: 0.0 # +1/-1 select the positive/negative offset envelope.
   rxra: true
-  edge_mode: reflect        # Use valid to discard centres without full spatial support.

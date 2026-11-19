@@ -15,6 +15,7 @@ from chime_perf.algorithms.reconstruction_algorithms import (
     surface_reflectance,
     toa_reflectance,
 )
+from chime_perf.params import boundary_settings
 
 
 def reconstruction(
@@ -38,6 +39,7 @@ def reconstruction(
     pl.generate_report(report_params is not None, report_params)
     pl.generate_breakpoints(pl.local_config.get("breakpoints", False) and save)
 
+    boundaries = boundary_settings(pl.local_config)
     product = None
     if data is None:
         if input_path is None:
@@ -96,7 +98,11 @@ def reconstruction(
     response = pl.run_operation(
         data=nominal,
         func=spectral_response,
-        args={"wavelength_nm": original_nm, "sigma_nm": sigma},
+        args={
+            "wavelength_nm": original_nm,
+            "sigma_nm": sigma,
+            "support_sigma": boundaries["kernel_support_sigma"],
+        },
     )
 
     channels = {}

@@ -85,35 +85,36 @@ def test_spectral_integration_matches_weighted_sum(radiance):
     np.testing.assert_allclose(result, radiance.image().values @ weights.T)
 
 
-@pytest.mark.parametrize("edge_mode", ["reflect", "valid"])
-def test_fused_convolution_matches_scipy(radiance, edge_mode):
-    """Fusing convolution and selection preserves the kernel sign and sampling phase."""
+def test_fused_convolution_matches_scipy(radiance):
+    """Edge extension and fused selection match SciPy, including the outermost centres."""
     # An asymmetric kernel catches accidental correlation instead of convolution.
     kernel = np.arange(1.0, 10).reshape(3, 3)
     kernel /= kernel.sum()
-    result = convolve_downsample(radiance, kernel, 2, 3, edge_mode).image()
-    expected = convolve(radiance.image().values, kernel[:, :, None], mode="reflect")
+    result = convolve_downsample(radiance, kernel, 2, 3).image()
+    expected = convolve(radiance.image().values, kernel[:, :, None], mode="nearest")
     act = np.arange(0, 11, 2)
     alt = np.arange(0, 11, 3)
-    if edge_mode == "valid":
-        act = act[(act >= 1) & (act < 10)]
-        alt = alt[(alt >= 1) & (alt < 10)]
 
     np.testing.assert_allclose(result, expected[act[:, None], alt[None, :], :])
     np.testing.assert_array_equal(result.ACT, radiance.image().ACT[act])
+    assert result.attrs["spatial_edge_mode"] == "edge"
 
 
 def test_rotation_preserves_linear_field_and_map_coordinates(radiance):
-    """Bilinear rotation reproduces a linear field and masks positions outside the map."""
+    """Rotation interpolates inside the map and repeats its nearest edge outside."""
     result = rotate_to_sensor(radiance, 30).image()
-    expected = 20 + result.map_ACT / 10 + result.map_ALT / 20
-    expected = expected + ((result.SPE - 550) / 30) ** 2
-    valid = np.isfinite(result)
-
-    np.testing.assert_allclose(
-        result.values[valid], expected.transpose(*result.dims).values[valid]
+    lookup_act = result.map_ACT.clip(
+        min=float(radiance.image().ACT[0]), max=float(radiance.image().ACT[-1])
     )
-    assert np.isnan(result).any()
+    lookup_alt = result.map_ALT.clip(
+        min=float(radiance.image().ALT[0]), max=float(radiance.image().ALT[-1])
+    )
+    expected = 20 + lookup_act / 10 + lookup_alt / 20
+    expected = expected + ((result.SPE - 550) / 30) ** 2
+    np.testing.assert_allclose(result, expected.transpose(*result.dims))
+    assert bool(np.isfinite(result).all())
+    # The requested map coordinates remain available, even for edge-extended samples.
+    assert float(result.map_ACT.min()) < float(radiance.image().ACT[0])
     assert result.attrs["geometry"] == "sensor"
 
 
@@ -222,3 +223,31 @@ def test_physical_noise_model_rejects_wrong_units(radiance):
 
     with pytest.raises(ValueError, match="Expected units"):
         temporal_snr(radiance, 200.0, 0.2)
+
+
+def test_edge_padding_preserves_constant_small_scene(radiance):
+    """Even a kernel larger than the image keeps every centre and a constant signal."""
+    source = eopl.image_t(radiance.image().isel(ACT=slice(0, 2), ALT=slice(0, 2)))
+    source.image().values[:] = 7
+    rotated = rotate_to_sensor(source, 35)
+    kernel = np.ones((9, 9)) / 81
+    result = convolve_downsample(rotated, kernel, 1, 1).image()
+
+    np.testing.assert_allclose(result, 7)
+    assert result.shape == source.image().shape
+
+
+def test_edge_padding_preserves_missing_input(radiance):
+    """Real missing measurements remain missing; padding does not replace them."""
+    radiance.image().values[0, 0, :] = np.nan
+    result = rotate_to_sensor(radiance, 0).image()
+    assert bool(np.isnan(result[0, 0]).all())
+
+
+@pytest.mark.parametrize("mode", ["reflect", "valid"])
+def test_spatial_operations_reject_other_boundary_modes(radiance, mode):
+    """Only nearest-edge extension is supported by both spatial operations."""
+    with pytest.raises(ValueError, match="Only edge padding"):
+        rotate_to_sensor(radiance, 20, edge_mode=mode)
+    with pytest.raises(ValueError, match="Only edge padding"):
+        convolve_downsample(radiance, np.ones((3, 3)) / 9, 1, 1, edge_mode=mode)

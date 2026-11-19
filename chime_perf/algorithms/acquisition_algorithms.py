@@ -9,7 +9,7 @@ from chime_perf.algorithms.algorithms import require_units
 from chime_perf.algorithms.instrument_algorithms import isrf_sigma
 
 
-def spectral_response(centres, wavelength_nm, sigma_nm):
+def spectral_response(centres, wavelength_nm, sigma_nm, support_sigma=4):
     """Normalise the Gaussian response, including each sample's wavelength width."""
     wavelength_nm = np.asarray(wavelength_nm, dtype=float)
     if wavelength_nm.size < 2 or np.any(np.diff(wavelength_nm) <= 0):
@@ -17,19 +17,25 @@ def spectral_response(centres, wavelength_nm, sigma_nm):
 
     centre = centres.image()
     require_units(centre, "nm")
+    # The extra axis compares every channel centre with every input wavelength.
     distance = wavelength_nm - centre.values[..., None]
     sigma_nm = np.asarray(sigma_nm)
     if np.any(sigma_nm <= 0) or not np.isfinite(sigma_nm).all():
         raise ValueError("Spectral response widths must be finite and positive.")
 
-    # Four standard deviations retain the response tails to numerical accuracy.
-    if np.any(centre.values - 4 * sigma_nm < wavelength_nm[0]) or np.any(
-        centre.values + 4 * sigma_nm > wavelength_nm[-1]
+    if not np.isfinite(support_sigma) or support_sigma <= 0:
+        raise ValueError("Kernel support must be finite and positive.")
+
+    # Include the response tails out to the declared number of standard deviations.
+    if np.any(centre.values - support_sigma * sigma_nm < wavelength_nm[0]) or np.any(
+        centre.values + support_sigma * sigma_nm > wavelength_nm[-1]
     ):
-        raise ValueError("Input wavelengths must cover each channel's +/-4 sigma response.")
+        raise ValueError(
+            "Input wavelengths must cover each channel's complete response support."
+        )
 
     response = np.exp(-0.5 * (distance / sigma_nm[..., None]) ** 2)
-    response *= np.abs(distance) <= 4 * sigma_nm[..., None]
+    response *= np.abs(distance) <= support_sigma * sigma_nm[..., None]
     response *= np.gradient(wavelength_nm)
     total = response.sum(axis=-1, keepdims=True)
     if np.any(total == 0):
@@ -133,8 +139,10 @@ def integrate_spectral(data, response, spacing_m, heading_deg):
     return image_t(result)
 
 
-def rotate_to_sensor(data, heading_deg):
+def rotate_to_sensor(data, heading_deg, edge_mode="edge"):
     """Evaluate the map radiance at the rotated sensor-grid coordinates."""
+    if edge_mode != "edge":
+        raise ValueError("Only edge padding is supported.")
     source = data.image()
     x, y = sensor_coordinates(source, heading_deg)
 
@@ -144,21 +152,24 @@ def rotate_to_sensor(data, heading_deg):
         interpolate = RegularGridInterpolator(
             (source.ACT.values, source.ALT.values),
             source.values,
-            bounds_error=False,
-            fill_value=np.nan,
+            bounds_error=True,
         )
-        result = source.copy(data=interpolate(np.stack((x, y), axis=-1)))
+        # Clip only the lookup positions: values outside the map repeat its nearest edge.
+        lookup_x = np.clip(x, source.ACT.values[0], source.ACT.values[-1])
+        lookup_y = np.clip(y, source.ALT.values[0], source.ALT.values[-1])
+        result = source.copy(data=interpolate(np.stack((lookup_x, lookup_y), axis=-1)))
 
     # These coordinates retain the original map position of every output centre.
     result = result.assign_coords(map_ACT=(("ACT", "ALT"), x), map_ALT=(("ACT", "ALT"), y))
     result.map_ACT.attrs["units"] = "m"
     result.map_ALT.attrs["units"] = "m"
     result.attrs["heading_deg"] = float(heading_deg)
+    result.attrs["spatial_edge_mode"] = edge_mode
     result.attrs["geometry"] = "sensor"
     return image_t(result)
 
 
-def convolve_downsample(data, kernel, factor_act, factor_alt, edge_mode="reflect"):
+def convolve_downsample(data, kernel, factor_act, factor_alt, edge_mode="edge"):
     """Evaluate spatial convolution only at the nominal centres that will be kept."""
     source = data.image()
     kernel = np.asarray(kernel, dtype=float)
@@ -168,24 +179,18 @@ def convolve_downsample(data, kernel, factor_act, factor_alt, edge_mode="reflect
         raise ValueError("The spatial kernel must be finite and sum to one.")
     if any(not isinstance(s, (int, np.integer)) or s < 1 for s in (factor_act, factor_alt)):
         raise ValueError("Spatial oversampling factors must be positive integers.")
-    if edge_mode not in ("reflect", "valid"):
-        raise ValueError("edge_mode must be reflect or valid.")
+    if edge_mode != "edge":
+        raise ValueError("Only edge padding is supported.")
 
     radius_act, radius_alt = np.array(kernel.shape) // 2
     act = np.arange(0, source.sizes["ACT"], factor_act)
     alt = np.arange(0, source.sizes["ALT"], factor_alt)
 
-    if edge_mode == "valid":
-        act = act[(act >= radius_act) & (act < source.sizes["ACT"] - radius_act)]
-        alt = alt[(alt >= radius_alt) & (alt < source.sizes["ALT"] - radius_alt)]
-    if not act.size or not alt.size:
-        raise ValueError("The scene is too small for the spatial kernel's valid interior.")
-
-    # Symmetric padding matches scipy.ndimage's half-sample 'reflect' boundary.
+    # Repeat the outermost values for the full kernel radius; keep every nominal centre.
     padded = np.pad(
         source.values,
         ((radius_act, radius_act), (radius_alt, radius_alt), (0, 0)),
-        mode="symmetric",
+        mode="edge",
     )
     values = np.empty((act.size, alt.size, source.sizes["SPE"]))
 
@@ -208,6 +213,7 @@ def relative_radiance(data, lref):
     """Express noise-free radiance as a fraction of the reference radiance."""
     source = data.image()
     require_units(source, "W m-2 sr-1 um-1")
+    # lref has one value per channel; it repeats across both spatial axes.
     image = source.copy(data=(source / lref).data)
     image.attrs["units"] = "1"
     if np.any(image.values[np.isfinite(image)] < 0):
@@ -291,16 +297,17 @@ def striping_gains(data, sigma, rng, enabled=True):
 def apply_striping(data, gains):
     """Apply the saved column gain to every ALT pixel."""
     source = data.image()
+    # Xarray matches ACT and SPE by name and repeats each gain along the missing ALT axis.
     values = (source * gains.image()).transpose(*source.dims)
     return image_t(source.copy(data=values.data))
 
 
-def select_channels(wavelength_nm, parameters, fwhm_nm):
+def select_channels(wavelength_nm, parameters, fwhm_nm, support_sigma=4):
     """Keep nominal channels whose Gaussian response is covered by the input."""
     sigma = isrf_sigma(float(fwhm_nm))
     centres = parameters.wavelength_nm
-    covered = (centres - 4 * sigma >= wavelength_nm[0]) & (
-        centres + 4 * sigma <= wavelength_nm[-1]
+    covered = (centres - support_sigma * sigma >= wavelength_nm[0]) & (
+        centres + support_sigma * sigma <= wavelength_nm[-1]
     )
     if not covered.any():
         raise ValueError("The input spectrum does not cover any full CHIME channel response.")

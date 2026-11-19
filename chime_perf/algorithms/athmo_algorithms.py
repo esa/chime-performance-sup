@@ -214,6 +214,7 @@ def propagate(data, atmosphere):
     denominator = 1 - albedo * reflectance
     valid = np.isfinite(reflectance) & (reflectance >= 0) & (denominator > 0)
 
+    # Xarray repeats each SPE-only atmospheric coefficient across ACT and ALT pixels.
     radiance = path + scale * transmission * reflectance / denominator.where(valid)
     radiance = reflectance.copy(data=radiance.transpose(*reflectance.dims).data)
     radiance.attrs = {

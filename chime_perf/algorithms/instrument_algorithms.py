@@ -91,17 +91,20 @@ def psf_kernel(
     sigma_act_px: float,
     sigma_alt_px: float,
     size: int | None = None,
+    support_sigma: float = 4.0,
 ) -> np.ndarray:
     """Separable 2-D Gaussian PSF kernel (ACT, ALT), normalised to 1 (Eq. 11, §5).
 
     Sigmas are in pixels of the grid it will be applied to: the oversampled grid
-    ``size`` defaults to the smallest odd value covering +/-4 sigma.
+    ``size`` defaults to the smallest odd value covering +/-support_sigma sigma.
     """
     if sigma_act_px <= 0.0 or sigma_alt_px <= 0.0:
         raise ValueError("PSF sigmas must be strictly positive")
 
+    if not np.isfinite(support_sigma) or support_sigma <= 0:
+        raise ValueError("Kernel support must be finite and positive")
     if size is None:
-        size = 2 * int(np.ceil(4.0 * max(sigma_act_px, sigma_alt_px))) + 1
+        size = 2 * int(np.ceil(support_sigma * max(sigma_act_px, sigma_alt_px))) + 1
     if size < 1 or size % 2 == 0:
         raise ValueError(f"size must be a positive odd number of samples, got {size}")
 

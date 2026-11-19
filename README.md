@@ -194,9 +194,13 @@ and `solar_scale`, together with path radiance and spherical albedo.
 Instrument settings are shown in `example/pipeline.yml`. Only nominal channels
 with complete +/-4-sigma spectral coverage are simulated; missing wavelengths are
 not extrapolated. Spatial convolution is evaluated only at retained detector centres.
-`edge_mode: reflect` mirrors the scene at its boundaries; `valid` keeps only centres
-with complete kernel support, preserving the original sampling phase. Rotation masks
-positions outside the source scene. The map coordinates remain in the output product.
+The shared `boundaries` settings are fixed to `spatial: edge` and
+`kernel_support_sigma: 4`. Rotation and spatial convolution repeat the nearest
+boundary values outside the scene; no detector centres are cropped and spatial
+boundaries introduce no NaNs. Genuine missing input values remain missing.
+Convolution padding covers the complete kernel radius, and the detector sampling
+origin and requested map coordinates are retained. Spectral response still requires
+real wavelength coverage; spatial edge padding does not invent missing spectra.
 
 Noise and RXRA are enabled independently; ARA gain and offset default to zero.
 A fixed seed reproduces the saved noise, column gains and spectral shifts. Set

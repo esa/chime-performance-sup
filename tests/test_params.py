@@ -183,3 +183,23 @@ def test_invalid_channel_values_are_reported(parameter_files, old, new, message)
 
     with pytest.raises(ValueError, match=message):
         ChimeParams.load(parameter_files)
+
+
+def test_default_and_explicit_boundary_policy_agree():
+    """Missing boundary settings use the same explicit edge and 4-sigma policy."""
+    from chime_perf.params import boundary_settings
+
+    expected = {"spatial": "edge", "kernel_support_sigma": 4}
+    assert boundary_settings({}) == expected
+    assert boundary_settings({"boundaries": expected}) == expected
+
+
+@pytest.mark.parametrize(
+    "settings", [{"spatial": "reflect"}, {"kernel_support_sigma": 3}, {"margin": 2}]
+)
+def test_boundary_policy_rejects_unsupported_settings(settings):
+    """Unsupported settings raise an error instead of silently changing edge handling."""
+    from chime_perf.params import boundary_settings
+
+    with pytest.raises(ValueError, match="boundaries"):
+        boundary_settings({"boundaries": settings})

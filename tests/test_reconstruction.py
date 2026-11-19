@@ -163,6 +163,7 @@ def test_full_chain_memory_and_disk_handoffs_agree(
     config = tmp_path / "config.yml"
     settings = {
         "instrument": {
+            "heading_deg": 30.0,
             "temporal_noise": errors_enabled,
             "rxra": errors_enabled,
             "spectral_error_sigma_nm": 0.2 if errors_enabled else 0,
@@ -191,6 +192,7 @@ def test_full_chain_memory_and_disk_handoffs_agree(
     with xr.open_dataset(tmp_path / "memory/reconstruction/reconstructed.nc") as memory:
         with xr.open_dataset(tmp_path / "disk/reconstruction/reconstructed.nc") as disk:
             xr.testing.assert_equal(memory.reflectance, disk.reflectance)
+            assert bool(np.isfinite(memory.reflectance).all())
             if not errors_enabled:
                 np.testing.assert_allclose(memory.reflectance, 0.2)
     assert (tmp_path / "memory/athmo/toa.nc").is_file()
