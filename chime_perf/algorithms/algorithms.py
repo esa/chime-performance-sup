@@ -39,3 +39,9 @@ def reflectance_image(data):
             raise ValueError(f"Coordinate {dimension} must have units={unit!r}.")
 
     return reflectance
+
+
+def require_units(image, expected):
+    """Check the units required by a physical equation, independently of image names."""
+    if image.attrs.get("units") != expected:
+        raise ValueError(f"Expected units={expected!r}, got {image.attrs.get('units')!r}.")

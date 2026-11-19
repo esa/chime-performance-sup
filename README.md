@@ -90,6 +90,11 @@ owns its EOPL Pipeline and schedules the individual mathematical operations:
   quantities, then inverse atmospheric correction to BOA reflectance. Algorithms
   are in `chime_perf/algorithms/reconstruction_algorithms.py`.
 
+Algorithms preserve the first input image's name; module I/O chooses names for
+saved products and checkpoints. Interpolation, convolution and dimensionless gains
+preserve input units. Physical equations check their required units and assign
+output units explicitly; no automatic unit conversion is performed.
+
 Shared grid and image helpers are in `chime_perf/algorithms/algorithms.py`.
 The radiometric, spectral and spatial performance equations are grouped in
 `chime_perf/algorithms/instrument_algorithms.py`.

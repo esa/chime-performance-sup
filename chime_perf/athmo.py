@@ -72,7 +72,7 @@ def athmo(
             func=combine_transmission,
         )
         atmosphere["transmission"] = transmission.image()
-        pl.save_bkp(transmission, "transmission")
+        pl.save_bkp(image_t(transmission.image(), name="transmission"), "transmission")
 
     # Step 2: Convert solar irradiance to the radiance scale C.
     if "solar_scale" not in atmosphere:
@@ -82,7 +82,7 @@ def athmo(
             args={"solar_zenith_deg": atmosphere.attrs["solar_zenith_deg"]},
         )
         atmosphere["solar_scale"] = scale.image()
-        pl.save_bkp(scale, "solar_scale")
+        pl.save_bkp(image_t(scale.image(), name="solar_scale"), "solar_scale")
 
     # Step 3: L = P + C T rho / (1 - S rho), at every pixel and wavelength.
     data = pl.run_operation(
@@ -109,7 +109,7 @@ def athmo(
 
         Path(output_root).mkdir(parents=True, exist_ok=True)
         atmosphere.to_netcdf(Path(output_root) / "atmosphere.nc")
-        pl.save_output(data, "toa")
+        pl.save_output(image_t(data.image(), name="radiance"), "toa")
         pl.log.info(f"TOA radiance saved to {Path(output_root) / 'toa.nc'}")
 
     return data

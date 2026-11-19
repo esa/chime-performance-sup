@@ -231,7 +231,7 @@ def instrument(
         pl.add_variable("rxra_gain", gains.image(), pinned=True)
         pl.add_variable("valid", np.isfinite(data.image()), pinned=True)
         pl.manifest["atmosphere_source"] = str(Path(coefficient_path).resolve())
-        pl.save_output(data, "instrument")
+        pl.save_output(image_t(data.image(), name="radiance"), "instrument")
         pl.log.info(f"Detector radiance saved to {Path(output_root) / 'instrument.nc'}")
 
     return data

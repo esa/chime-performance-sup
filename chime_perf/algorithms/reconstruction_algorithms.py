@@ -4,6 +4,8 @@ import numpy as np
 import xarray as xr
 from eopl import image_t
 
+from chime_perf.algorithms.algorithms import require_units
+
 
 def average_atmosphere(data, response):
     """Average one saved atmospheric quantity over each nominal channel response."""
@@ -31,36 +33,51 @@ def average_atmosphere(data, response):
 
 def toa_reflectance(data, solar_scale):
     """Divide measured radiance by the saved solar radiance scale C."""
+    source = data.image()
+    require_units(source, "W m-2 sr-1 um-1")
     scale = solar_scale.image()
-    result = data.image() / scale.where(np.isfinite(scale) & (scale > 0))
-    result.attrs = {**data.image().attrs, "units": "1"}
-    return image_t(result.rename("toa_reflectance"))
+    require_units(scale, "W m-2 sr-1 um-1")
+    result = source / scale.where(np.isfinite(scale) & (scale > 0))
+    result = source.copy(data=result.transpose(*source.dims).data)
+    result.attrs["units"] = "1"
+    return image_t(result)
 
 
 def path_reflectance(data, solar_scale):
     """Express saved atmospheric path radiance in the same reflectance units."""
+    source = data.image()
+    require_units(source, "W m-2 sr-1 um-1")
     scale = solar_scale.image()
-    result = data.image() / scale.where(np.isfinite(scale) & (scale > 0))
+    require_units(scale, "W m-2 sr-1 um-1")
+    result = source / scale.where(np.isfinite(scale) & (scale > 0))
+    result = source.copy(data=result.data)
     result.attrs["units"] = "1"
-    return image_t(result.rename("path_reflectance"))
+    return image_t(result)
 
 
 def remove_atmosphere(data, path, transmission):
     """Subtract path reflectance and divide by two-way transmission."""
+    source = data.image()
+    require_units(source, "1")
+    require_units(path.image(), "1")
     t = transmission.image()
-    result = (data.image() - path.image()) / t.where(np.isfinite(t) & (t > 0))
-    result.attrs = data.image().attrs.copy()
-    return image_t(result.rename("surface_contribution"))
+    require_units(t, "1")
+    result = (source - path.image()) / t.where(np.isfinite(t) & (t > 0))
+    result = source.copy(data=result.transpose(*source.dims).data)
+    return image_t(result)
 
 
 def surface_reflectance(data, spherical_albedo):
     """Remove repeated surface--atmosphere reflection: rho = y / (1 + S y)."""
     y = data.image()
+    require_units(y, "1")
+    require_units(spherical_albedo.image(), "1")
     denominator = 1 + spherical_albedo.image() * y
     result = y / denominator.where(np.isfinite(denominator) & (denominator > 0))
-    result.attrs = {**data.image().attrs, "units": "1"}
+    result = y.copy(data=result.transpose(*y.dims).data)
+    result.attrs["units"] = "1"
     # Negative noisy retrievals remain visible; do not clip them to physical bounds.
-    return image_t(result.rename("reflectance"))
+    return image_t(result)
 
 
 # EOPAL operation contracts: CPU NumPy/Xarray implementations; inputs are read-only.

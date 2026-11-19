@@ -5,6 +5,7 @@ import xarray as xr
 from eopl import image_t
 from scipy.interpolate import RegularGridInterpolator
 
+from chime_perf.algorithms.algorithms import require_units
 from chime_perf.algorithms.instrument_algorithms import isrf_sigma
 
 
@@ -15,6 +16,7 @@ def spectral_response(centres, wavelength_nm, sigma_nm):
         raise ValueError("Input wavelengths must be strictly increasing.")
 
     centre = centres.image()
+    require_units(centre, "nm")
     distance = wavelength_nm - centre.values[..., None]
     sigma_nm = np.asarray(sigma_nm)
     if np.any(sigma_nm <= 0) or not np.isfinite(sigma_nm).all():
@@ -39,7 +41,11 @@ def spectral_response(centres, wavelength_nm, sigma_nm):
     coords = {name: centre[name] for name in centre.dims}
     coords["sample_SPE"] = wavelength_nm
     weights = xr.DataArray(
-        response, dims=(*centre.dims, "sample_SPE"), coords=coords, name="response"
+        response,
+        dims=(*centre.dims, "sample_SPE"),
+        coords=coords,
+        name=centre.name,
+        attrs={"units": "1"},
     )
     return image_t(weights)
 
@@ -93,7 +99,7 @@ def channel_centres(
         nominal_nm + shifts,
         dims=("detector_column", "SPE"),
         coords={"detector_column": indices, "SPE": nominal_nm},
-        name="true_channel_centre",
+        name=data.image().name,
         attrs={"units": "nm"},
     )
     return image_t(centres)
@@ -120,7 +126,7 @@ def integrate_spectral(data, response, spacing_m, heading_deg):
         values,
         dims=source.dims,
         coords={"ACT": source.ACT, "ALT": source.ALT, "SPE": weights.SPE},
-        name="radiance",
+        name=source.name,
         attrs=source.attrs.copy(),
     )
     result.SPE.attrs["units"] = "nm"
@@ -200,56 +206,69 @@ def convolve_downsample(data, kernel, factor_act, factor_alt, edge_mode="reflect
 
 def relative_radiance(data, lref):
     """Express noise-free radiance as a fraction of the reference radiance."""
-    image = data.image() / lref
+    source = data.image()
+    require_units(source, "W m-2 sr-1 um-1")
+    image = source.copy(data=(source / lref).data)
+    image.attrs["units"] = "1"
     if np.any(image.values[np.isfinite(image)] < 0):
         raise ValueError("Noise-free radiance must be non-negative.")
-    return image_t(image.rename("relative_radiance"))
+    return image_t(image)
 
 
 def temporal_snr(data, g, n0):
     """Calculate SNR = g r / sqrt(r + N0)."""
     r = data.image()
-    return image_t((g * r / np.sqrt(r + n0)).rename("snr"))
+    require_units(r, "1")
+    result = r.copy(data=(g * r / np.sqrt(r + n0)).data)
+    result.attrs["units"] = "1"
+    return image_t(result)
 
 
 def temporal_sigma(data, lref, g, n0):
     """Evaluate noise amplitude without dividing zero radiance by zero SNR."""
-    image = lref / g * np.sqrt(data.image() + n0)
-    return image_t(image.rename("noise_sigma"))
-
-
-def draw_noise(data, rng, enabled=True):
-    """Save one independent Gaussian radiance error per pixel and channel."""
-    sigma = data.image()
-    values = rng.normal(size=sigma.shape) * sigma.values if enabled else np.zeros(sigma.shape)
-    result = sigma.copy(data=values).rename("temporal_noise")
+    r = data.image()
+    require_units(r, "1")
+    result = r.copy(data=(lref / g * np.sqrt(r + n0)).data)
     result.attrs["units"] = "W m-2 sr-1 um-1"
     return image_t(result)
 
 
+def draw_noise(data, rng, enabled=True):
+    """Draw independent Gaussian errors in the supplied standard deviation's units."""
+    sigma = data.image()
+    values = rng.normal(size=sigma.shape) * sigma.values if enabled else np.zeros(sigma.shape)
+    return image_t(sigma.copy(data=values))
+
+
 def electron_signal(data, a, b):
     """Calculate the paper's equivalent electron signal n = a + b r."""
-    return image_t((a + b * data.image()).rename("electron_signal"))
+    r = data.image()
+    require_units(r, "1")
+    result = r.copy(data=(a + b * r).data)
+    result.attrs["units"] = "electron"
+    return image_t(result)
 
 
 def absolute_offset(data, electrons, lref, a, b, coefficient, s0):
     """Calculate the additive ARA term, with the explicit zero-radiance limit."""
     signal = data.image()
     n = electrons.image()
+    require_units(signal, "W m-2 sr-1 um-1")
+    require_units(n, "electron")
     ratio = np.zeros(signal.shape)
     np.divide(signal.values, n.values, out=ratio, where=n.values != 0)
 
     # For a = 0, L / (b L / Lref) tends to Lref / b, including at L = 0.
     zero_limit = (signal.values == 0) & (np.asarray(a) == 0)
     ratio = np.where(zero_limit, np.asarray(lref / b), ratio)
-    return image_t(signal.copy(data=coefficient * s0 * ratio).rename("absolute_offset"))
+    return image_t(signal.copy(data=coefficient * s0 * ratio))
 
 
 def apply_absolute_error(data, noise, offset, gain):
     """Multiply only the signal by the ARA gain; retain the original noise draw."""
-    image = gain * data.image() + noise.image() + offset.image()
-    image.attrs = data.image().attrs.copy()
-    return image_t(image.rename("radiance"))
+    source = data.image()
+    values = gain * source + noise.image() + offset.image()
+    return image_t(source.copy(data=values.transpose(*source.dims).data))
 
 
 def striping_gains(data, sigma, rng, enabled=True):
@@ -263,7 +282,7 @@ def striping_gains(data, sigma, rng, enabled=True):
         values,
         dims=("ACT", "SPE"),
         coords={"ACT": source.ACT, "SPE": source.SPE},
-        name="rxra_gain",
+        name=source.name,
         attrs={"units": "1"},
     )
     return image_t(gains)
@@ -271,9 +290,9 @@ def striping_gains(data, sigma, rng, enabled=True):
 
 def apply_striping(data, gains):
     """Apply the saved column gain to every ALT pixel."""
-    image = (data.image() * gains.image()).transpose("ACT", "ALT", "SPE")
-    image.attrs = data.image().attrs.copy()
-    return image_t(image.rename("radiance"))
+    source = data.image()
+    values = (source * gains.image()).transpose(*source.dims)
+    return image_t(source.copy(data=values.data))
 
 
 def select_channels(wavelength_nm, parameters, fwhm_nm):

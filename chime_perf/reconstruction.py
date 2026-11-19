@@ -91,7 +91,7 @@ def reconstruction(
     # Step 1: Average the saved C, T, S and P with the UNSHIFTED channel response.
     # This is a band approximation: averaging does not commute with the nonlinear
     # forward equation when atmosphere or surface spectra vary within a channel.
-    nominal = image_t(image.SPE.rename("nominal_channel_centre"))
+    nominal = image_t(image.SPE)
     sigma = pl.run_function(isrf_sigma, args={"fwhm_nm": np.asarray(fwhm)})
     response = pl.run_operation(
         data=nominal,
@@ -107,7 +107,7 @@ def reconstruction(
 
     # Step 2: Convert measured radiance to TOA reflectance, rho* = L / C.
     toa = pl.run_operation(data=(data, channels["solar_scale"]), func=toa_reflectance)
-    toa = pl.save_bkp(toa, "toa_reflectance")
+    toa = pl.save_bkp(image_t(toa.image(), name="toa_reflectance"), "toa_reflectance")
 
     # Step 3: Atmospheric path reflectance, rho_atm = P / C.
     path = pl.run_operation(
@@ -118,7 +118,9 @@ def reconstruction(
     contribution = pl.run_operation(
         data=(toa, path, channels["transmission"]), func=remove_atmosphere
     )
-    contribution = pl.save_bkp(contribution, "surface_contribution")
+    contribution = pl.save_bkp(
+        image_t(contribution.image(), name="surface_contribution"), "surface_contribution"
+    )
 
     # Step 5: Remove repeated reflection, rho = y / (1 + S y).
     data = pl.run_operation(
@@ -137,7 +139,7 @@ def reconstruction(
 
         pl.add_variable("valid", np.isfinite(data.image()), pinned=True)
         pl.manifest["atmosphere_source"] = str(Path(coefficient_path).resolve())
-        pl.save_output(data, "reconstructed")
+        pl.save_output(image_t(data.image(), name="reflectance"), "reconstructed")
         pl.log.info(f"BOA reflectance saved to {Path(output_root) / 'reconstructed.nc'}")
 
     return data

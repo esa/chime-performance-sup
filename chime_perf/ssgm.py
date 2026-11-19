@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import xarray as xr
-from eopl import Pipeline
+from eopl import Pipeline, image_t
 
-from chime_perf.algorithms.algorithms import grid
+from chime_perf.algorithms.algorithms import grid, reflectance_image
 from chime_perf.algorithms.ssgm_algorithms import (
     fit_library,
     interpolate_spatial,
@@ -42,6 +42,7 @@ def ssgm(
             raise ValueError("Supply input_path or an in-memory image through data.")
         data = pl.read_input(str(input_path), dask=False)
 
+    reflectance_image(data)
     settings = pl.local_config.get("scene", {})
     spatial_interpolation = settings.get("spatial_interpolation", False)
     detector_spacing_m = settings.get("detector_spacing_m", 30.0)
@@ -88,7 +89,9 @@ def ssgm(
             func=fit_library,
             args={"library": library},
         )
-        weights = pl.save_bkp(weights, "mixture_weights")
+        weights = pl.save_bkp(
+            image_t(weights.image(), name="mixture_weights"), "mixture_weights"
+        )
 
         # Step 3: Reconstruct rho(lambda_m) = sum_r c_r e_r(lambda_m).
         data = pl.run_operation(
@@ -99,7 +102,7 @@ def ssgm(
 
     # 3. FINAL PHASE
     if save:
-        pl.save_output(data, "scene")
+        pl.save_output(image_t(data.image(), name="reflectance"), "scene")
         pl.log.info(f"Scene saved to {Path(output_root) / 'scene.nc'}")
 
     return data

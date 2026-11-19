@@ -7,6 +7,8 @@ import numpy as np
 import xarray as xr
 from eopl import image_t
 
+from chime_perf.algorithms.algorithms import require_units
+
 
 def prepare_atmosphere(
     wavelength_nm,
@@ -137,12 +139,15 @@ def prepare_atmosphere(
 
 def combine_transmission(gas, downward, upward):
     """T = t_gas * t_down * t_up, including absorption and both scattering paths."""
+    for quantity in (gas, downward, upward):
+        require_units(quantity.image(), "1")
+
     gas_values, down_values, up_values = xr.align(
         gas.image(), downward.image(), upward.image(), join="exact"
     )
 
     transmission = gas_values * down_values * up_values
-    transmission = transmission.rename("transmission")
+    transmission = gas.image().copy(data=transmission.data)
     transmission.attrs["units"] = "1"
 
     return image_t(transmission)
@@ -156,10 +161,11 @@ combine_transmission.input_access = ("read", "read", "read")
 
 def calculate_solar_scale(irradiance, solar_zenith_deg):
     """C = E_0 * cos(solar zenith) / pi, converting irradiance to a radiance scale."""
+    require_units(irradiance.image(), "W m-2 um-1")
     zenith_rad = np.deg2rad(solar_zenith_deg)
 
     scale = irradiance.image() * np.cos(zenith_rad) / np.pi
-    scale = scale.rename("solar_scale")
+    scale = irradiance.image().copy(data=scale.data)
     scale.attrs["units"] = "W m-2 sr-1 um-1"
 
     return image_t(scale)
@@ -209,7 +215,7 @@ def propagate(data, atmosphere):
     valid = np.isfinite(reflectance) & (reflectance >= 0) & (denominator > 0)
 
     radiance = path + scale * transmission * reflectance / denominator.where(valid)
-    radiance = radiance.transpose(*reflectance.dims).rename("radiance")
+    radiance = reflectance.copy(data=radiance.transpose(*reflectance.dims).data)
     radiance.attrs = {
         **reflectance.attrs,
         "units": "W m-2 sr-1 um-1",

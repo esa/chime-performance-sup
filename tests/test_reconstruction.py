@@ -112,17 +112,23 @@ def test_spectral_atmosphere_uses_nominal_band_weights(tmp_path, instrument_prod
 def test_invalid_correction_is_masked_and_negative_values_remain():
     """Zero transmission, invalid solar scale and singular inversion produce NaN."""
 
-    def image(values):
-        return eopl.image_t(xr.DataArray(values, dims="SPE"))
+    def image(values, units="1", name="user_image"):
+        return eopl.image_t(
+            xr.DataArray(values, dims="SPE", name=name, attrs={"units": units})
+        )
 
-    signal = image([-1.0, 2.0, 3.0])
-    toa = toa_reflectance(signal, image([1.0, 0.0, 1.0]))
-    path = path_reflectance(image([0.0, 0.0, 0.0]), image([1.0, 0.0, 1.0]))
+    signal = image([-1.0, 2.0, 3.0], "W m-2 sr-1 um-1", "user_signal")
+    scale = image([1.0, 0.0, 1.0], "W m-2 sr-1 um-1", "user_scale")
+    toa = toa_reflectance(signal, scale)
+    path = path_reflectance(image([0.0, 0.0, 0.0], "W m-2 sr-1 um-1"), scale)
     y = remove_atmosphere(toa, path, image([1.0, 1.0, 0.0]))
     result = surface_reflectance(y, image([0.0, 0.0, 0.0])).image()
     np.testing.assert_allclose(result, [-1.0, np.nan, np.nan], equal_nan=True)
     singular = surface_reflectance(image([-1.0]), image([1.0])).image()
     assert np.isnan(singular[0])
+    assert result.name == signal.image().name
+    assert result.attrs["units"] == "1"
+    assert signal.image().attrs["units"] == "W m-2 sr-1 um-1"
 
 
 def test_missing_saved_atmosphere_is_rejected(tmp_path, instrument_product):

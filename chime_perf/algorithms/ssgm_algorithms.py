@@ -57,23 +57,23 @@ def validate_spatial_sampling(data, detector_spacing_m):
 
 def interpolate_spatial(data, detector_spacing_m=30.0, oversampling="auto"):
     """Interpolate ACT and ALT onto grids with integer spatial oversampling."""
-    reflectance = reflectance_image(data)
+    source = data.image().transpose("ACT", "ALT", "SPE")
 
-    act, factor_act = spatial_grid(reflectance.ACT.values, detector_spacing_m, oversampling)
-    alt, factor_alt = spatial_grid(reflectance.ALT.values, detector_spacing_m, oversampling)
+    act, factor_act = spatial_grid(source.ACT.values, detector_spacing_m, oversampling)
+    alt, factor_alt = spatial_grid(source.ALT.values, detector_spacing_m, oversampling)
 
     # Applying linear interpolation along ACT and ALT gives bilinear interpolation.
     # Existing missing samples remain NaN; no points outside the scene are requested.
-    result = reflectance
+    result = source.copy(deep=False)
 
-    if not np.array_equal(act, reflectance.ACT.values):
+    if not np.array_equal(act, source.ACT.values):
         result = result.interp(ACT=act, method="linear")
 
-    if not np.array_equal(alt, reflectance.ALT.values):
+    if not np.array_equal(alt, source.ALT.values):
         result = result.interp(ALT=alt, method="linear")
 
     result.attrs = {
-        **reflectance.attrs,
+        **source.attrs,
         "detector_spacing_m": float(detector_spacing_m),
         "spatial_oversampling_ACT": factor_act,
         "spatial_oversampling_ALT": factor_alt,
@@ -103,23 +103,23 @@ def interpolate_spectra(spectra, wavelength_nm, target_nm):
 
 def interpolate_spectral(data, step_nm=None):
     """Interpolate each pixel spectrum onto the requested SPE grid."""
-    reflectance = reflectance_image(data)
+    source = data.image().transpose("ACT", "ALT", "SPE")
 
-    source_nm = grid(reflectance.SPE.values)
+    source_nm = grid(source.SPE.values)
     target_nm = grid(source_nm, step_nm)
 
     # Each row contains one pixel spectrum. Numba only compiles this small loop.
-    spectra = reflectance.values.reshape(-1, len(source_nm))
+    spectra = source.values.reshape(-1, len(source_nm))
     result = interpolate_spectra(spectra, source_nm, target_nm)
 
     image = xr.DataArray(
-        result.reshape(len(reflectance.ACT), len(reflectance.ALT), len(target_nm)),
+        result.reshape(len(source.ACT), len(source.ALT), len(target_nm)),
         dims=("ACT", "ALT", "SPE"),
-        coords={"ACT": reflectance.ACT, "ALT": reflectance.ALT, "SPE": target_nm},
-        name="reflectance",
-        attrs={**reflectance.attrs, "spectral_method": "linear"},
+        coords={"ACT": source.ACT, "ALT": source.ALT, "SPE": target_nm},
+        name=source.name,
+        attrs={**source.attrs, "spectral_method": "linear"},
     )
-    image.SPE.attrs["units"] = "nm"
+    image.SPE.attrs = source.SPE.attrs.copy()
 
     return image_t(image)
 
@@ -157,7 +157,7 @@ def fit_library(data, library):
         weights,
         dims=("ACT", "ALT", "material"),
         coords={"ACT": reflectance.ACT, "ALT": reflectance.ALT, "material": measured.material},
-        name="mixture_weights",
+        name=reflectance.name,
         attrs={**reflectance.attrs, "units": "1"},
     )
 
@@ -193,8 +193,8 @@ def reconstruct_library(data, library, target_nm):
         reflectance,
         dims=("ACT", "ALT", "SPE"),
         coords={"ACT": weights.ACT, "ALT": weights.ALT, "SPE": target_nm},
-        name="reflectance",
-        attrs={**weights.attrs, "spectral_method": "NNLS"},
+        name=weights.name,
+        attrs={**weights.attrs, "units": "1", "spectral_method": "NNLS"},
     )
     image.SPE.attrs["units"] = "nm"
 

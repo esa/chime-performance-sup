@@ -17,7 +17,11 @@ from chime_perf.algorithms.athmo_algorithms import (  # noqa: E402
     prepare_atmosphere,
     propagate,
 )
-from chime_perf.algorithms.ssgm_algorithms import spatial_grid  # noqa: E402
+from chime_perf.algorithms.ssgm_algorithms import (  # noqa: E402
+    interpolate_spatial,
+    interpolate_spectral,
+    spatial_grid,
+)
 from chime_perf.athmo import athmo  # noqa: E402
 from chime_perf.ssgm import ssgm  # noqa: E402
 
@@ -36,7 +40,7 @@ def reflectance():
         values,
         dims=("ACT", "ALT", "SPE"),
         coords={"ACT": act, "ALT": alt, "SPE": spe},
-        name="reflectance",
+        name="user_surface",
         attrs={"units": "1", "geometry": "map"},
     )
     for name, unit in (("ACT", "m"), ("ALT", "m"), ("SPE", "nm")):
@@ -148,11 +152,24 @@ def test_transmission_and_solar_scale_are_separate_operations(reflectance):
     upward = eopl.image_t(xr.DataArray([0.7] * 3, dims="SPE", coords={"SPE": spe}))
     irradiance = eopl.image_t(xr.DataArray([100.0] * 3, dims="SPE", coords={"SPE": spe}))
 
+    for quantity in (gas, downward, upward):
+        quantity.image().attrs["units"] = "1"
+    irradiance.image().attrs["units"] = "W m-2 um-1"
+    gas.change_array_name("user_gas")
+    downward.change_array_name("user_downward")
+    upward.change_array_name("user_upward")
+    irradiance.change_array_name("user_sun")
+
     transmission = combine_transmission(gas, downward, upward)
     scale = calculate_solar_scale(irradiance, solar_zenith_deg=60)
 
     np.testing.assert_allclose(transmission.image(), 0.9 * 0.8 * 0.7)
     np.testing.assert_allclose(scale.image(), 50 / np.pi)
+    assert transmission.image().name == "user_gas"
+    assert scale.image().name == "user_sun"
+    assert transmission.image().attrs["units"] == "1"
+    assert scale.image().attrs["units"] == "W m-2 sr-1 um-1"
+    assert irradiance.image().attrs["units"] == "W m-2 um-1"
 
 
 def test_forward_atmosphere_and_ideal_inverse(reflectance, atmosphere):
@@ -162,6 +179,9 @@ def test_forward_atmosphere_and_ideal_inverse(reflectance, atmosphere):
     expected = 2 + 100 * 0.8 * rho / (1 - 0.1 * rho)
 
     np.testing.assert_allclose(radiance, expected)
+    assert radiance.name == rho.name
+    assert radiance.attrs["units"] == "W m-2 sr-1 um-1"
+    assert rho.attrs["units"] == "1"
 
     y = (radiance - 2) / (100 * 0.8)
     recovered = y / (1 + 0.1 * y)
@@ -360,3 +380,24 @@ def test_noninteger_input_requires_explicit_spatial_interpolation(reflectance):
 
     with pytest.raises(ValueError, match="enable scene.spatial_interpolation"):
         ssgm(data=eopl.image_t(image), save=False)
+
+
+@pytest.mark.parametrize(
+    "operation, settings",
+    [
+        (interpolate_spatial, {"oversampling": 5}),
+        (interpolate_spectral, {"step_nm": 5}),
+    ],
+    ids=["spatial", "spectral"],
+)
+def test_interpolation_preserves_custom_name_and_units(reflectance, operation, settings):
+    """Generic interpolation also accepts temperature, preserving its name and units."""
+    reflectance.image().attrs["units"] = "K"
+    original = reflectance.image().copy(deep=True)
+
+    result = operation(reflectance, **settings).image()
+
+    assert result.name == "user_surface"
+    assert result.attrs["units"] == "K"
+    assert result.SPE.attrs["units"] == "nm"
+    xr.testing.assert_identical(reflectance.image(), original)
