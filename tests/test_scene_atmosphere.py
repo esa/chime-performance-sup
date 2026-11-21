@@ -437,7 +437,12 @@ def test_spatial_interpolation_matches_xarray_with_missing_samples(dtype, spacin
     actual = interpolate_spatial(eopl.image_t(image)).image()
 
     np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
-    xr.testing.assert_allclose(actual, expected, rtol=1e-13, atol=1e-13)
+    # Float32 intermediate rounding can differ even when both results are float64.
+    value_atol = max(1e-13, np.finfo(values.dtype).eps)
+    np.testing.assert_allclose(actual.values, expected.values, rtol=1e-13, atol=value_atol)
+    xr.testing.assert_allclose(
+        actual.coords.to_dataset(), expected.coords.to_dataset(), rtol=1e-13, atol=1e-13
+    )
     xr.testing.assert_identical(image, original)
     assert actual.name == image.name
     assert actual.attrs["units"] == "1"
