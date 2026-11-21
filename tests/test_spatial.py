@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from chime_perf.spatial import psf_kernel, psf_sigma_px
+from chime_perf.algorithms.instrument_algorithms import psf_kernel, psf_sigma_px
 
 
 def test_psf_sigma_scales_with_oversampling():
@@ -20,7 +20,7 @@ def test_psf_kernel_is_normalized_symmetric_and_centered():
 
     kernel = psf_kernel(1.0, 2.0)
 
-    assert kernel.shape == (17, 17)
+    assert kernel.shape == (13, 13)
     assert kernel.sum() == pytest.approx(1.0)
     assert np.all(kernel >= 0)
 
@@ -28,7 +28,7 @@ def test_psf_kernel_is_normalized_symmetric_and_centered():
     np.testing.assert_allclose(kernel, kernel[::-1, :])
     np.testing.assert_allclose(kernel, kernel[:, ::-1])
 
-    assert kernel[8, 8] == kernel.max()
+    assert kernel[6, 6] == kernel.max()
 
 
 def test_psf_kernel_keeps_across_and_along_track_axes_in_order():
@@ -83,3 +83,10 @@ def test_psf_kernel_rejects_invalid_sizes(size):
 
     with pytest.raises(ValueError, match="positive odd"):
         psf_kernel(1.0, 1.0, size=size)
+
+
+def test_kernel_support_sets_the_full_padding_radius():
+    """Three sigma rounds upward, so the odd kernel covers both response tails."""
+    kernel = psf_kernel(1.2, 2.1, support_sigma=3)
+    assert kernel.shape == (15, 15)
+    assert kernel.sum() == pytest.approx(1)

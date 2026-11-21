@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.integrate import trapezoid
 
-from chime_perf.spectral import isrf, isrf_sigma
+from chime_perf.algorithms.instrument_algorithms import isrf, isrf_sigma
 
 
 def test_isrf_has_the_requested_full_width_at_half_maximum():

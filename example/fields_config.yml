@@ -1,0 +1,47 @@
+# AVIRIS-NG agricultural scene; atmospheric settings are illustrative assumptions.
+run_options:
+  precision: float32
+
+breakpoints: false
+
+# Fixed policy: repeat nearest edge values, including during rotation; do not crop centres.
+boundaries:
+  spatial: edge
+  spectral: edge
+  kernel_support_sigma: 3
+
+# Show the input and final output; other report sections stay disabled.
+report:
+  report_format: ipynb       # Use py for a runnable Python report.
+  generate_input: true
+  plot_2d_indexes: [0]
+
+scene:
+  spatial_interpolation: true
+  detector_spacing_m: 30.0
+  spatial_oversampling: auto  # 5 m input already has integer oversampling factor 6
+  spectral_step_nm: 2.8       # 8.4 nm / 3; omit to keep existing wavelengths
+
+atmosphere:
+  profile: USStandard1962
+  aerosol: Continental
+  aot550: 0.1
+  solar_zenith_deg: 30.0
+  solar_azimuth_deg: 0.0
+  view_zenith_deg: 0.0
+  view_azimuth_deg: 0.0
+  target_altitude_km: 0.2
+  month: 11
+  day: 9
+
+# Keep channel centres inside the input range; repeat edge values for response tails.
+instrument:
+  seed: 42
+  heading_deg: 0.0
+  fwhm_nm: 10.0
+  spectral_error_sigma_nm: 0.0
+  spectral_error_common_fraction: 0.0
+  temporal_noise: true
+  ara_gain_coefficient: 0.0   # +1/-1 select the positive/negative ARA gain envelope.
+  ara_offset_coefficient: 0.0 # +1/-1 select the positive/negative offset envelope.
+  rxra: true

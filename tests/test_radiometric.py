@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from chime_perf.radiometric import apply_rxra, ara, nedl, rxra_gain, snr
+from chime_perf.algorithms.instrument_algorithms import apply_rxra, ara, nedl, rxra_gain, snr
 
 
 # Each input pair runs the same test with a different radiance and expected SNR.
