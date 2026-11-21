@@ -3,7 +3,7 @@
 This repo hosts a lightweight, shareable model of the instrument performance of **CHIME**, the Copernicus
 Hyperspectral Imaging Mission for the Environment. It is a reference implementation of the
 SPIE paper [*"CHIME System Performance at Critical Design Review: A parametric model for
-end-to-end simulation analysis"*](https://spie.org/spie-sensors-imaging/presentation/CHIME-system-performance-at-critical-design-review--a-parametric/14279-7)
+end-to-end simulation analysis"*](https://doi.org/10.1117/12.3119031)
 (Fernandez Nunez et al., ESA-ESTEC / OHB System AG / ESA-ESRIN).
 
 This software is developed and maintained by the **CHIME Project** at the European Space Agency (ESA).
@@ -71,8 +71,8 @@ open the notebook interactively.
 
 Please cite Fernandez Nunez et al., *CHIME System Performance at Critical Design Review:
 A parametric model for end-to-end simulation analysis*, SPIE Sensors + Imaging,
-[presentation 14279-7](https://spie.org/spie-sensors-imaging/presentation/CHIME-system-performance-at-critical-design-review--a-parametric/14279-7),
+[doi:10.1117/12.3119031](https://doi.org/10.1117/12.3119031),
 and state the software version used. The manuscript is included in `docs/`.
 
-[CITATION.cff](CITATION.cff) contains the paper title, full author list and SPIE link.
+[CITATION.cff](CITATION.cff) contains the paper title, full author list and DOI.
 The software is licensed under [Apache-2.0](LICENSE), all rights to the CHIME Project at European Space Agency.
