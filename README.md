@@ -99,20 +99,39 @@ Shared grid and image helpers are in `chime_perf/algorithms/algorithms.py`.
 The radiometric, spectral and spatial performance equations are grouped in
 `chime_perf/algorithms/instrument_algorithms.py`.
 
+### AVIRIS-NG examples
+
+The two examples use real surface reflectance: snow at Senator Beck Basin from
+[SnowEx21](https://doi.org/10.5067/ZAI3M64WWN5V), and agricultural fields near
+Wellington from the [BioSCape AVIRIS-NG mosaic](https://doi.org/10.3334/ORNLDAAC/2427).
+Run these commands from the checkout, with a separately installed 6S executable:
+
 ```bash
-python example/setup_scene.py
-chime-sup --ssgm --input demo-input/reflectance.nc --output outputs/scene --config example/pipeline.yml
-chime-sup --athmo --input outputs/scene/scene.nc --output outputs/atmosphere --sixs-path /path/to/sixs
-chime-sup --instrument --input outputs/atmosphere/toa.nc --output outputs/instrument --config example/pipeline.yml
-chime-sup --reconstruction --input outputs/instrument/instrument.nc --output outputs/reconstruction --config example/pipeline.yml
+python -m pip install -e ".[pipeline]" earthaccess
 ```
 
-Select `--all` to compose the modules in processing order. Images are passed
-in memory. Propagation also saves `athmo/toa.nc` with its atmospheric coefficients;
-reconstruction writes `reconstruction/reconstructed.nc`:
+Snow: 608 ACT × 779 ALT × 425 bands at 4 m, producing 81 × 104 × 250 samples:
 
 ```bash
-chime-sup --all --input demo-input/reflectance.nc --output outputs/chain --config example/pipeline.yml --sixs-path /path/to/sixs
+python example/prepare_aviris.py snow --sixs-path /path/to/sixs
+
+chime-sup --all \
+  --input ../datasets/aviris_ng/snow.nc \
+  --atmosphere ../datasets/aviris_ng/snow_atmosphere.nc \
+  --config example/snow_config.yml \
+  --output outputs/snow --save-intermediates
+```
+
+Fields: 512 ACT × 640 ALT × 425 bands at 5 m, producing 86 × 107 × 250 samples:
+
+```bash
+python example/prepare_aviris.py fields --sixs-path /path/to/sixs
+
+chime-sup --all \
+  --input ../datasets/aviris_ng/fields.nc \
+  --atmosphere ../datasets/aviris_ng/fields_atmosphere.nc \
+  --config example/fields_config.yml \
+  --output outputs/fields --save-intermediates
 ```
 
 Add `--save-intermediates` to save each module's product and have the next module
@@ -131,14 +150,14 @@ from chime_perf.athmo import athmo
 from chime_perf.instrument import instrument
 from chime_perf.reconstruction import reconstruction
 
-scene = ssgm(input_path="reflectance.nc", config_path="pipeline.yml", save=False)
-radiance = athmo(data=scene, config_path="pipeline.yml", output_root="outputs/athmo")
+scene = ssgm(input_path="reflectance.nc", config_path="example/snow_config.yml", save=False)
+radiance = athmo(data=scene, config_path="example/snow_config.yml", output_root="outputs/athmo")
 detector = instrument(
-    data=radiance, atmosphere_path="outputs/athmo/toa.nc", config_path="pipeline.yml",
+    data=radiance, atmosphere_path="outputs/athmo/toa.nc", config_path="example/snow_config.yml",
     save=False,
 )
 reflectance = reconstruction(
-    data=detector, atmosphere_path="outputs/athmo/toa.nc", config_path="pipeline.yml",
+    data=detector, atmosphere_path="outputs/athmo/toa.nc", config_path="example/snow_config.yml",
     output_root="outputs/reconstruction",
 )
 ```
@@ -171,14 +190,14 @@ and centre convention before final detector sampling.
 With `spatial_interpolation: false` (the default), the spatial operation is skipped.
 Existing coordinates must already be regular with integer oversampling; other grids
 raise an error asking to enable interpolation. This keeps fractional oversampling
-out of the instrument interface. The example YAML explicitly selects factor 5 for
-its synthetic scene.
+out of the instrument interface. The AVIRIS-NG examples use `auto`: the snow grid
+is resampled from 4 m to 3.75 m, while the fields grid remains at 5 m.
 
-Add `--library demo-input/library.nc` for the synthetic NNLS example.
+Add `--library path/to/library.nc` to reconstruct scene spectra through NNLS.
 A library contains `measured(SPE, material)` values averaged with the input
 sensor's band responses and `reflectance(library_SPE, material)` spectra on
-its oversampled wavelength grid. The supplied example uses synthetic point-sampled
-bands over 500–600 nm, not the full CHIME spectrum.
+its oversampled wavelength grid. The two AVIRIS-NG examples use direct spectral
+interpolation and do not require a library.
 
 Py6S requires a separately installed 6S executable; its
 [installation guide](https://py6s.readthedocs.io/en/latest/installation.html)
@@ -191,7 +210,7 @@ solver's compatible `SPE` arrays. The file may contain the gas/downward/upward
 transmission and solar irradiance inputs, or already combined `transmission`
 and `solar_scale`, together with path radiance and spherical albedo.
 
-Instrument settings are shown in `example/pipeline.yml`. Nominal channel centres
+Instrument settings are shown in `example/snow_config.yml`. Nominal channel centres
 inside the input wavelength range are simulated, with +/-3-sigma response support.
 Response tails outside that range repeat the nearest available spectral value.
 Spatial convolution is evaluated only at retained detector centres.
