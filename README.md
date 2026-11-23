@@ -1,7 +1,7 @@
 # 🛰️ CHIME parametric performance model
  
 This repo hosts a lightweight, shareable model of the instrument performance of **CHIME**, the Copernicus
-Hyperspectral Imaging Mission for the Environment. 🌈🌍 It is a reference implementation of the
+Hyperspectral Imaging Mission for the Environment.  It is a reference implementation of the
 SPIE paper [*"CHIME System Performance at Critical Design Review: A parametric model for
 end-to-end simulation analysis"*](https://doi.org/10.1117/12.3119031)
 (Fernandez Nunez et al., ESA-ESTEC / OHB System AG / ESA-ESRIN).
@@ -13,25 +13,25 @@ the CHIME performance beyond the system requirements and need to generate their 
  
 The model takes oversampled TOA radiance as input and outputs CHIME-like L1 data. As such, it can be integrated into third-party simulators that generate oversampled TOA radiance, or be used within the proposed mini E2E reference implementation.
  
-🚫 It is **not** a replacement for dedicated E2E simulators like CHIME OPSI or CHEES,
+It is **not** a replacement for dedicated E2E simulators like CHIME OPSI or CHEES,
 nor for industrial verification tools. It is also not a rigorous per-pixel uncertainty propagation (CHIME ships that separately),
 nor an orbit or direct-location framework.
  
  
-## 🚧 Status
+## Status
  
-Currently under development. The first release, v0.1.0, has left the launch pad 🧑‍🚀 and contains the radiometric,
+Currently under development. The first release, v0.1.0, contains the radiometric,
 spectral and spatial performance functions, CDR-2025 parameters and an example notebook.
  
 Still to come: a full mini E2E reference implementation, including scene generation, atmospheric propagation and correction.
  
-## 🚀 Roadmap
+##  Roadmap
  
 - **Oct/Nov 2026:** First release.
 - **Nov 2026:** Iterations as part of the SUP workshop at ESRIN.
-- **Dec 2027 — v1.0:** Includes the first full E2E implementation.
-- 🔧 Updates and maintenance throughout Phase D.
-- **End of 2028:** Update of instrument modelling after instrument-level TVAC characterisation. 🌡️
+- **Dec 2026 — v1.0:** Includes the first full E2E implementation.
+-  Updates and maintenance throughout Phase D.
+- **End of 2028:** Update of instrument modelling after instrument-level TVAC characterisation. 
 ## 📦 Download and install
  
 Download a source archive from the [GitHub releases](https://github.com/esa/chime-performance-sup/releases),
